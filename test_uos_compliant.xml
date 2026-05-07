@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SystemInfo>
+  <Hostname>uos-desktop-02</Hostname>
+  <IP>192.168.1.11</IP>
+  <CollectTime>2026-05-06 10:15:00</CollectTime>
+  <OS>
+    <Name>统信UOS（桌面版）</Name>
+    <Version>20</Version>
+    <Kernel>5.10.0-8-amd64</Kernel>
+  </OS>
+  <CPU>
+    <Model>Kunpeng 920</Model>
+    <Architecture>aarch64</Architecture>
+    <Cores>96</Cores>
+  </CPU>
+</SystemInfo>

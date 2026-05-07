@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SystemInfo>
+  <Hostname>founder-server-03</Hostname>
+  <IP>192.168.1.12</IP>
+  <CollectTime>2026-05-06 11:00:00</CollectTime>
+  <OS>
+    <Name>中科方德（桌面版）</Name>
+    <Version>4.0</Version>
+    <Kernel>5.4.18-85.el8.x86_64</Kernel>
+  </OS>
+  <CPU>
+    <Model>Hygon C86 7185</Model>
+    <Architecture>x86_64</Architecture>
+    <Cores>32</Cores>
+  </CPU>
+</SystemInfo>

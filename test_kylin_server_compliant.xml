@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SystemInfo>
+  <Hostname>kylin-server-04</Hostname>
+  <IP>192.168.1.13</IP>
+  <CollectTime>2026-05-06 13:45:00</CollectTime>
+  <OS>
+    <Name>银河麒麟（服务器版）</Name>
+    <Version>V10</Version>
+    <Kernel>4.19.90-24.4.v2101.ky10.x86_64</Kernel>
+  </OS>
+  <CPU>
+    <Model>Intel Xeon Gold 6248</Model>
+    <Architecture>x86_64</Architecture>
+    <Cores>40</Cores>
+  </CPU>
+</SystemInfo>

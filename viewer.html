@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>国产操作系统信息采集 - XML解析工具</title>
+<style>
+:root {
+    --bg: #0f1923;
+    --bg-card: #1a2736;
+    --bg-hover: #223344;
+    --border: #2c4057;
+    --text: #e0e8f0;
+    --text-muted: #8899aa;
+    --accent: #3b82f6;
+    --accent-light: #60a5fa;
+    --accent-bg: rgba(59, 130, 246, 0.1);
+    --success: #10b981;
+    --success-bg: rgba(16, 185, 129, 0.1);
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --error-bg: rgba(239, 68, 68, 0.1);
+    --tag-kylin: #e74c3c;
+    --tag-uos: #3498db;
+    --tag-openeuler: #f39c12;
+    --tag-deepin: #2ecc71;
+    --tag-other: #9b59b6;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+}
+
+.header {
+    background: linear-gradient(135deg, #1a2736 0%, #0f1923 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.header-left { display: flex; align-items: center; gap: 16px; }
+
+.logo {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-light));
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: bold; color: #fff;
+}
+
+.header h1 { font-size: 20px; font-weight: 600; }
+.header p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+.stats-bar { display: flex; gap: 24px; }
+
+.stat-item { text-align: center; }
+.stat-num { font-size: 24px; font-weight: 700; }
+.stat-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.stat-num.accent { color: var(--accent-light); }
+.stat-num.green { color: var(--success); }
+.stat-num.red { color: var(--error); }
+
+.container { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
+
+.upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 48px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    background: var(--bg-card);
+    margin-bottom: 24px;
+}
+
+.upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.upload-zone svg { margin-bottom: 12px; }
+.upload-zone h3 { font-size: 16px; margin-bottom: 6px; }
+.upload-zone p { font-size: 13px; color: var(--text-muted); }
+.upload-zone input { display: none; }
+
+.compliance-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+
+.compliance-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.compliance-header:hover { background: var(--bg-hover); }
+
+.compliance-header-left {
+    display: flex; align-items: center; gap: 10px;
+}
+
+.compliance-header-left h3 { font-size: 15px; font-weight: 600; }
+.compliance-header-left p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+.compliance-toggle {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.3s;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.compliance-panel.open .compliance-toggle { transform: rotate(180deg); }
+
+.compliance-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease;
+}
+
+.compliance-panel.open .compliance-body {
+    max-height: 2000px;
+}
+
+.compliance-body-inner {
+    padding: 0 24px 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.rule-group {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+
+.rule-group-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+}
+
+.rule-group-title svg { width: 14px; height: 14px; color: var(--text-muted); }
+
+.rule-textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 10px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.6;
+    resize: vertical;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+
+.rule-textarea:focus { border-color: var(--accent); }
+.rule-textarea::placeholder { color: var(--text-muted); opacity: 0.6; }
+
+.rule-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+
+.compliance-actions {
+    padding: 0 24px 20px;
+    display: flex; gap: 10px; justify-content: flex-end;
+}
+
+.toolbar {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 20px; flex-wrap: wrap;
+}
+
+.search-box {
+    flex: 1; min-width: 200px;
+    position: relative;
+}
+
+.search-box input {
+    width: 100%; padding: 10px 16px 10px 40px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); font-size: 14px;
+    outline: none; transition: border-color 0.2s;
+}
+
+.search-box input:focus { border-color: var(--accent); }
+.search-box svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+
+.btn {
+    padding: 10px 20px; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--bg-card);
+    color: var(--text); font-size: 13px; cursor: pointer;
+    transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+    white-space: nowrap;
+}
+
+.btn:hover { border-color: var(--accent); background: var(--accent-bg); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-light); }
+.btn-danger { border-color: var(--error); color: var(--error); }
+.btn-danger:hover { background: rgba(239, 68, 68, 0.1); }
+.btn-success { background: var(--success); border-color: var(--success); color: #fff; }
+.btn-success:hover { background: #0ea572; }
+
+.filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.chip {
+    padding: 6px 14px; border-radius: 20px; font-size: 12px;
+    cursor: pointer; transition: all 0.2s;
+    background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text-muted);
+}
+
+.chip.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-light); }
+.chip:hover { border-color: var(--accent); }
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 16px;
+}
+
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+.card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+
+.card.card-pass { border-color: var(--success); }
+.card.card-pass:hover { box-shadow: 0 8px 24px rgba(16,185,129,0.15); }
+.card.card-fail { border-color: var(--error); }
+.card.card-fail:hover { box-shadow: 0 8px 24px rgba(239,68,68,0.15); }
+.card.card-na { border-color: var(--border); }
+
+.card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 3px;
+    opacity: 0; transition: opacity 0.3s;
+}
+
+.card.card-pass::before { background: var(--success); opacity: 1; }
+.card.card-fail::before { background: var(--error); opacity: 1; }
+.card:hover::before { opacity: 1; }
+
+.card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.card-header-left { flex: 1; min-width: 0; }
+
+.card-host { font-size: 16px; font-weight: 600; }
+.card-time { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+.card-badges { display: flex; gap: 6px; flex-shrink: 0; margin-left: 12px; }
+
+.card-badge {
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 500;
+}
+
+.badge-kylin { background: rgba(231,76,60,0.15); color: #e74c3c; }
+.badge-uos { background: rgba(52,152,219,0.15); color: #3498db; }
+.badge-openeuler { background: rgba(243,156,18,0.15); color: #f39c12; }
+.badge-deepin { background: rgba(46,204,113,0.15); color: #2ecc71; }
+.badge-other { background: rgba(155,89,182,0.15); color: #9b59b6; }
+.badge-pass { background: var(--success-bg); color: var(--success); }
+.badge-fail { background: var(--error-bg); color: var(--error); }
+.badge-na { background: rgba(136,153,170,0.15); color: var(--text-muted); }
+
+.card-section { margin-bottom: 14px; }
+.card-section:last-of-type { margin-bottom: 0; }
+
+.section-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text-muted); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+}
+
+.section-title svg { width: 14px; height: 14px; }
+
+.info-row {
+    display: flex; justify-content: space-between;
+    align-items: center; padding: 6px 0;
+    border-bottom: 1px solid rgba(44,64,87,0.4);
+    gap: 8px;
+}
+
+.info-row:last-child { border-bottom: none; }
+
+.info-label { font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
+.info-value { font-size: 13px; font-weight: 500; text-align: right; max-width: 60%; word-break: break-all; }
+
+.info-value.val-pass { color: var(--success); }
+.info-value.val-fail { color: var(--error); text-decoration: line-through; text-decoration-style: dashed; }
+
+.compliance-icon {
+    width: 16px; height: 16px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%; font-size: 9px; font-weight: 700;
+}
+
+.compliance-icon.icon-pass { background: var(--success-bg); color: var(--success); }
+.compliance-icon.icon-fail { background: var(--error-bg); color: var(--error); }
+.compliance-icon.icon-na { background: rgba(136,153,170,0.15); color: var(--text-muted); }
+
+.card-footer {
+    display: flex; align-items: center; justify-content: flex-end;
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid rgba(44,64,87,0.4);
+    gap: 8px;
+}
+
+.btn-sm {
+    padding: 4px 12px; border-radius: 6px; font-size: 12px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+}
+
+.btn-sm:hover { border-color: var(--accent); color: var(--accent-light); }
+.btn-sm.del:hover { border-color: var(--error); color: var(--error); }
+
+.empty-state {
+    text-align: center; padding: 80px 20px; color: var(--text-muted);
+}
+
+.empty-state svg { margin-bottom: 16px; opacity: 0.5; }
+.empty-state h3 { font-size: 16px; margin-bottom: 8px; color: var(--text); }
+.empty-state p { font-size: 13px; }
+
+.modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+}
+
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+.modal {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px; max-width: 600px;
+    width: 90%; max-height: 80vh; overflow-y: auto;
+    transform: scale(0.9); transition: transform 0.3s;
+}
+
+.modal-overlay.active .modal { transform: scale(1); }
+
+.modal h2 { font-size: 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+.modal pre {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; font-size: 13px;
+    overflow-x: auto; line-height: 1.6; color: var(--accent-light);
+}
+
+.toast {
+    position: fixed; bottom: 24px; right: 24px;
+    padding: 12px 20px; border-radius: 10px;
+    font-size: 13px; z-index: 2000;
+    transform: translateY(20px); opacity: 0;
+    transition: all 0.3s; pointer-events: none;
+}
+
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { background: var(--success); color: #fff; }
+.toast.error { background: var(--error); color: #fff; }
+.toast.info { background: var(--accent); color: #fff; }
+
+@media (max-width: 768px) {
+    .header { flex-direction: column; gap: 16px; padding: 16px; }
+    .container { padding: 16px; }
+    .grid { grid-template-columns: 1fr; }
+    .upload-zone { padding: 32px 16px; }
+    .toolbar { flex-direction: column; }
+    .compliance-body-inner { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-left">
+        <div class="logo">XC</div>
+        <div>
+            <h1>国产操作系统信息采集工具</h1>
+            <p>批量导入XML文件，解析与展示系统配置信息</p>
+        </div>
+    </div>
+    <div class="stats-bar">
+        <div class="stat-item">
+            <div class="stat-num accent" id="totalCount">0</div>
+            <div class="stat-label">采集总数</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-num green" id="passCount">0</div>
+            <div class="stat-label">合规</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-num red" id="failCount">0</div>
+            <div class="stat-label">不合规</div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="upload-zone" id="uploadZone">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <h3>拖拽XML文件到此处，或点击选择文件</h3>
+        <p>支持批量导入，可同时选择多个 .xml 文件</p>
+        <input type="file" id="fileInput" accept=".xml" multiple>
+    </div>
+
+    <div class="compliance-panel" id="compliancePanel">
+        <div class="compliance-header" onclick="toggleCompliancePanel()">
+            <div class="compliance-header-left">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <div>
+                    <h3>合规检查配置</h3>
+                    <p>配置各检查项的合规列表，每行一个值；列表为空表示不检查该项</p>
+                </div>
+            </div>
+            <div class="compliance-toggle">▼</div>
+        </div>
+        <div class="compliance-body">
+            <div class="compliance-body-inner">
+                <div class="rule-group">
+                    <div class="rule-group-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        系统名称
+                    </div>
+                    <textarea class="rule-textarea" id="rule_osName" placeholder="每行一个合规的系统名称，例如：&#10;银河麒麟（桌面版）&#10;统信UOS（桌面版）"></textarea>
+                    <div class="rule-hint">对采集到的"系统名称"字段进行合规匹配</div>
+                </div>
+                <div class="rule-group">
+                    <div class="rule-group-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        系统版本
+                    </div>
+                    <textarea class="rule-textarea" id="rule_osVersion" placeholder="每行一个合规的系统版本，例如：&#10;V10&#10;20"></textarea>
+                    <div class="rule-hint">对采集到的"系统版本"字段进行合规匹配</div>
+                </div>
+                <div class="rule-group">
+                    <div class="rule-group-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+                        CPU型号
+                    </div>
+                    <textarea class="rule-textarea" id="rule_cpuModel" placeholder="每行一个合规的CPU型号，例如：&#10;Kunpeng 920&#10;Loongson-3A5000"></textarea>
+                    <div class="rule-hint">对采集到的"CPU型号"字段进行合规匹配</div>
+                </div>
+                <div class="rule-group">
+                    <div class="rule-group-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                        CPU架构
+                    </div>
+                    <textarea class="rule-textarea" id="rule_cpuArch" placeholder="每行一个合规的CPU架构，例如：&#10;x86_64&#10;aarch64&#10;loongarch64"></textarea>
+                    <div class="rule-hint">对采集到的"CPU架构"字段进行合规匹配</div>
+                </div>
+            </div>
+            <div class="compliance-actions">
+                <button class="btn" onclick="resetRules()">重置</button>
+                <button class="btn btn-primary" onclick="applyRules()">应用合规规则</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar" id="toolbar" style="display:none;">
+        <div class="search-box">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="searchInput" placeholder="搜索主机名、IP、系统名称、CPU型号...">
+        </div>
+        <div class="filter-chips" id="filterChips">
+            <span class="chip active" data-filter="all" onclick="setFilter(this)">全部</span>
+        </div>
+        <button class="btn btn-primary" onclick="exportCSV()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出CSV
+        </button>
+        <button class="btn btn-danger" onclick="clearAll()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            清空
+        </button>
+    </div>
+
+    <div id="cardGrid" class="grid"></div>
+    <div id="emptyState" class="empty-state">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <h3>暂无数据</h3>
+        <p>请导入XML文件开始解析系统信息</p>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal" id="modalContent"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let allData = [];
+let activeFilter = 'all';
+let complianceRules = {
+    osName: [],
+    osVersion: [],
+    cpuModel: [],
+    cpuArch: []
+};
+let complianceResults = {};
+
+const RULE_KEYS = ['osName', 'osVersion', 'cpuModel', 'cpuArch'];
+const RULE_LABELS = { osName: '系统名称', osVersion: '系统版本', cpuModel: 'CPU型号', cpuArch: 'CPU架构' };
+
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+const searchInput = document.getElementById('searchInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', (e) => { e.preventDefault(); uploadZone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); fileInput.value = ''; });
+searchInput.addEventListener('input', renderCards);
+
+function handleFiles(files) {
+    let count = 0;
+    Array.from(files).forEach(file => {
+        if (!file.name.endsWith('.xml')) { showToast('跳过非XML文件: ' + file.name, 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = parseXML(e.target.result, file.name);
+                if (data) { allData.push(data); count++; updateUI(); }
+            } catch (err) { showToast('解析失败: ' + file.name + ' - ' + err.message, 'error'); }
+        };
+        reader.readAsText(file, 'UTF-8');
+    });
+    setTimeout(() => { if (count > 0) showToast('成功导入 ' + count + ' 个文件', 'success'); }, 500);
+}
+
+function parseXML(xmlStr, fileName) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlStr, 'text/xml');
+    if (doc.querySelector('parsererror')) throw new Error('XML格式错误');
+    const getText = (parent, tag) => { const el = parent.querySelector(tag); return el ? el.textContent.trim() : ''; };
+    const root = doc.querySelector('SystemInfo');
+    if (!root) throw new Error('未找到SystemInfo根节点');
+    return {
+        hostname: getText(root, 'Hostname'),
+        ip: getText(root, 'IP'),
+        collectTime: getText(root, 'CollectTime'),
+        osName: getText(root, 'OS > Name'),
+        osVersion: getText(root, 'OS > Version'),
+        kernel: getText(root, 'OS > Kernel'),
+        cpuModel: getText(root, 'CPU > Model'),
+        cpuArch: getText(root, 'CPU > Architecture'),
+        cpuCores: getText(root, 'CPU > Cores'),
+        fileName: fileName,
+        rawXML: xmlStr
+    };
+}
+
+function getOSBadge(osName) {
+    const n = osName.toLowerCase();
+    if (n.includes('kylin') || n.includes('麒麟')) return { cls: 'badge-kylin', label: '麒麟' };
+    if (n.includes('uos') || n.includes('统信')) return { cls: 'badge-uos', label: 'UOS' };
+    if (n.includes('openeuler') || n.includes('欧拉')) return { cls: 'badge-openeuler', label: 'openEuler' };
+    if (n.includes('deepin') || n.includes('深度')) return { cls: 'badge-deepin', label: 'Deepin' };
+    return { cls: 'badge-other', label: osName || '未知' };
+}
+
+function toggleCompliancePanel() {
+    document.getElementById('compliancePanel').classList.toggle('open');
+}
+
+function parseRuleText(id) {
+    const val = document.getElementById(id).value;
+    return val.split('\n').map(s => s.trim()).filter(Boolean);
+}
+
+function applyRules() {
+    RULE_KEYS.forEach(key => { complianceRules[key] = parseRuleText('rule_' + key); });
+    runComplianceCheck();
+    updateUI();
+    showToast('合规规则已应用', 'success');
+}
+
+function resetRules() {
+    RULE_KEYS.forEach(key => { document.getElementById('rule_' + key).value = ''; complianceRules[key] = []; });
+    complianceResults = {};
+    updateUI();
+    showToast('合规规则已重置', 'info');
+}
+
+function matchRule(value, ruleList) {
+    if (!ruleList || ruleList.length === 0) return 'na';
+    if (!value || value === '-' || value === 'Unknown') return 'fail';
+    const v = value.toLowerCase().trim();
+    for (const rule of ruleList) {
+        const r = rule.toLowerCase().trim();
+        if (v === r || v.includes(r) || r.includes(v)) return 'pass';
+    }
+    return 'fail';
+}
+
+function runComplianceCheck() {
+    complianceResults = {};
+    const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
+    if (!hasAnyRule) return;
+
+    allData.forEach((d, idx) => {
+        const itemResults = {};
+        let overallPass = true;
+        let anyChecked = false;
+
+        RULE_KEYS.forEach(key => {
+            if (complianceRules[key].length > 0) {
+                anyChecked = true;
+                const status = matchRule(d[key], complianceRules[key]);
+                itemResults[key] = status;
+                if (status === 'fail') overallPass = false;
+            } else {
+                itemResults[key] = 'na';
+            }
+        });
+
+        if (!anyChecked) {
+            complianceResults[idx] = { overall: 'na', items: itemResults };
+        } else {
+            complianceResults[idx] = { overall: overallPass ? 'pass' : 'fail', items: itemResults };
+        }
+    });
+}
+
+function getOverallStatus(idx) {
+    const r = complianceResults[idx];
+    if (!r) return 'na';
+    return r.overall;
+}
+
+function getItemStatus(idx, key) {
+    const r = complianceResults[idx];
+    if (!r || !r.items) return 'na';
+    return r.items[key] || 'na';
+}
+
+function updateUI() {
+    updateStats();
+    updateFilters();
+    renderCards();
+    document.getElementById('toolbar').style.display = allData.length ? 'flex' : 'none';
+    document.getElementById('emptyState').style.display = allData.length ? 'none' : 'block';
+}
+
+function updateStats() {
+    document.getElementById('totalCount').textContent = allData.length;
+    let passCount = 0, failCount = 0;
+    const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
+    if (hasAnyRule) {
+        allData.forEach((d, idx) => {
+            const s = getOverallStatus(idx);
+            if (s === 'pass') passCount++;
+            else if (s === 'fail') failCount++;
+        });
+    }
+    document.getElementById('passCount').textContent = passCount;
+    document.getElementById('failCount').textContent = failCount;
+}
+
+function updateFilters() {
+    const container = document.getElementById('filterChips');
+    container.innerHTML = '';
+
+    const allChip = document.createElement('span');
+    allChip.className = 'chip' + (activeFilter === 'all' ? ' active' : '');
+    allChip.dataset.filter = 'all';
+    allChip.textContent = '全部';
+    allChip.onclick = function() { setFilter(this); };
+    container.appendChild(allChip);
+
+    const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
+    if (hasAnyRule) {
+        const passChip = document.createElement('span');
+        passChip.className = 'chip' + (activeFilter === 'pass' ? ' active' : '');
+        passChip.dataset.filter = 'pass';
+        passChip.innerHTML = '✓ 合规';
+        passChip.style.color = activeFilter === 'pass' ? 'var(--success)' : '';
+        passChip.onclick = function() { setFilter(this); };
+        container.appendChild(passChip);
+
+        const failChip = document.createElement('span');
+        failChip.className = 'chip' + (activeFilter === 'fail' ? ' active' : '');
+        failChip.dataset.filter = 'fail';
+        failChip.innerHTML = '✗ 不合规';
+        failChip.style.color = activeFilter === 'fail' ? 'var(--error)' : '';
+        failChip.onclick = function() { setFilter(this); };
+        container.appendChild(failChip);
+    }
+
+    const osTypes = [...new Set(allData.map(d => d.osName))].filter(Boolean);
+    osTypes.forEach(os => {
+        const badge = getOSBadge(os);
+        const chip = document.createElement('span');
+        chip.className = 'chip' + (activeFilter === os ? ' active' : '');
+        chip.dataset.filter = os;
+        chip.textContent = badge.label;
+        chip.onclick = function() { setFilter(this); };
+        container.appendChild(chip);
+    });
+}
+
+function setFilter(el) {
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    activeFilter = el.dataset.filter;
+    renderCards();
+}
+
+function statusIcon(status) {
+    if (status === 'pass') return '<span class="compliance-icon icon-pass" title="合规">✓</span>';
+    if (status === 'fail') return '<span class="compliance-icon icon-fail" title="不合规">✗</span>';
+    return '<span class="compliance-icon icon-na" title="未检查">-</span>';
+}
+
+function valClass(status) {
+    if (status === 'pass') return ' val-pass';
+    if (status === 'fail') return ' val-fail';
+    return '';
+}
+
+function renderCards() {
+    const query = searchInput.value.toLowerCase();
+    let filtered = allData;
+
+    if (activeFilter === 'pass') {
+        filtered = filtered.filter((d, idx) => getOverallStatus(allData.indexOf(d)) === 'pass');
+    } else if (activeFilter === 'fail') {
+        filtered = filtered.filter((d, idx) => getOverallStatus(allData.indexOf(d)) === 'fail');
+    } else if (activeFilter !== 'all') {
+        filtered = filtered.filter(d => d.osName === activeFilter);
+    }
+
+    if (query) {
+        filtered = filtered.filter(d =>
+            d.hostname.toLowerCase().includes(query) ||
+            d.ip.toLowerCase().includes(query) ||
+            d.osName.toLowerCase().includes(query) ||
+            d.cpuModel.toLowerCase().includes(query) ||
+            d.osVersion.toLowerCase().includes(query) ||
+            d.kernel.toLowerCase().includes(query)
+        );
+    }
+
+    const grid = document.getElementById('cardGrid');
+    grid.innerHTML = '';
+
+    if (filtered.length === 0 && allData.length > 0) {
+        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:40px"><h3>无匹配结果</h3><p>尝试修改搜索关键词或筛选条件</p></div>';
+        return;
+    }
+
+    filtered.forEach((d) => {
+        const realIdx = allData.indexOf(d);
+        const badge = getOSBadge(d.osName);
+        const overall = getOverallStatus(realIdx);
+        const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
+
+        let cardCls = 'card';
+        if (hasAnyRule) cardCls += overall === 'pass' ? ' card-pass' : overall === 'fail' ? ' card-fail' : ' card-na';
+
+        let overallBadge = '';
+        if (hasAnyRule) {
+            if (overall === 'pass') overallBadge = '<span class="card-badge badge-pass">✓ 合规</span>';
+            else if (overall === 'fail') overallBadge = '<span class="card-badge badge-fail">✗ 不合规</span>';
+            else overallBadge = '<span class="card-badge badge-na">未检查</span>';
+        }
+
+        function renderRow(label, value, key) {
+            const st = hasAnyRule ? getItemStatus(realIdx, key) : 'na';
+            const icon = hasAnyRule ? statusIcon(st) : '';
+            const cls = hasAnyRule ? valClass(st) : '';
+            return `<div class="info-row"><span class="info-label">${label}</span><span class="info-value${cls}">${icon} ${esc(value) || '-'}</span></div>`;
+        }
+
+        const card = document.createElement('div');
+        card.className = cardCls;
+        card.innerHTML = `
+            <div class="card-header">
+                <div class="card-header-left">
+                    <div class="card-host">${esc(d.hostname) || '未知主机'}</div>
+                    <div class="card-time">${esc(d.ip) ? esc(d.ip) + ' | ' : ''}${esc(d.collectTime) || '未知时间'}</div>
+                </div>
+                <div class="card-badges">
+                    ${overallBadge}
+                    <span class="card-badge ${badge.cls}">${esc(badge.label)}</span>
+                </div>
+            </div>
+            <div class="card-section">
+                <div class="section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    操作系统
+                </div>
+                ${renderRow('系统名称', d.osName, 'osName')}
+                ${renderRow('系统版本', d.osVersion, 'osVersion')}
+                <div class="info-row"><span class="info-label">内核版本</span><span class="info-value">${esc(d.kernel) || '-'}</span></div>
+            </div>
+            <div class="card-section">
+                <div class="section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+                    处理器
+                </div>
+                ${renderRow('CPU型号', d.cpuModel, 'cpuModel')}
+                ${renderRow('架构', d.cpuArch, 'cpuArch')}
+                <div class="info-row"><span class="info-label">核心数</span><span class="info-value">${esc(d.cpuCores) || '-'}</span></div>
+            </div>
+            <div class="card-footer">
+                <button class="btn-sm" onclick="viewXML(${realIdx})">查看XML</button>
+                <button class="btn-sm del" onclick="removeCard(${realIdx})">删除</button>
+            </div>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+function esc(str) {
+    if (!str) return '';
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function viewXML(idx) {
+    const d = allData[idx];
+    if (!d) return;
+    const formatted = formatXML(d.rawXML);
+    document.getElementById('modalContent').innerHTML = `
+        <h2>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            ${esc(d.hostname)} - 原始XML
+        </h2>
+        <pre>${esc(formatted)}</pre>
+    `;
+    document.getElementById('modalOverlay').classList.add('active');
+}
+
+function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+
+function formatXML(xml) {
+    let formatted = '';
+    let indent = '';
+    const tab = '  ';
+    xml.split(/>\s*</).forEach(node => {
+        if (node.match(/^\/\w/)) indent = indent.substring(tab.length);
+        formatted += indent + '<' + node + '>\r\n';
+        if (node.match(/^<?\w[^>]*[^\/]$/) && !node.startsWith('?') && !node.startsWith('!')) indent += tab;
+    });
+    return formatted.substring(1, formatted.length - 3);
+}
+
+function removeCard(idx) {
+    allData.splice(idx, 1);
+    complianceResults = {};
+    runComplianceCheck();
+    updateUI();
+    showToast('已删除', 'info');
+}
+
+function clearAll() {
+    if (allData.length === 0) return;
+    allData = [];
+    complianceResults = {};
+    activeFilter = 'all';
+    searchInput.value = '';
+    updateUI();
+    showToast('已清空所有数据', 'info');
+}
+
+function exportCSV() {
+    if (allData.length === 0) { showToast('暂无数据可导出', 'error'); return; }
+    const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
+
+    const BOM = '\uFEFF';
+    let header = '主机名,IP地址,采集时间,系统名称,系统版本,内核版本,CPU型号,CPU架构,CPU核心数,来源文件';
+    let rows = allData.map(d => [
+        csvCell(d.hostname), csvCell(d.ip), csvCell(d.collectTime),
+        csvCell(d.osName), csvCell(d.osVersion), csvCell(d.kernel),
+        csvCell(d.cpuModel), csvCell(d.cpuArch), csvCell(d.cpuCores),
+        csvCell(d.fileName)
+    ].join(','));
+
+    if (hasAnyRule) {
+        header += ',合规状态';
+        rows = allData.map((d, idx) => {
+            const overall = getOverallStatus(idx);
+            const statusText = overall === 'pass' ? '合规' : overall === 'fail' ? '不合规' : '未检查';
+            return [
+                csvCell(d.hostname), csvCell(d.ip), csvCell(d.collectTime),
+                csvCell(d.osName), csvCell(d.osVersion), csvCell(d.kernel),
+                csvCell(d.cpuModel), csvCell(d.cpuArch), csvCell(d.cpuCores),
+                csvCell(d.fileName), csvCell(statusText)
+            ].join(',');
+        });
+    }
+
+    const csv = BOM + header + '\r\n' + rows.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sysinfo_export_' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV已导出', 'success');
+}
+
+function csvCell(val) {
+    val = val || '';
+    if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return '"' + val.replace(/"/g, '""') + '"';
+    }
+    return val;
+}
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast ' + type + ' show';
+    setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+</script>
+</body>
+</html>

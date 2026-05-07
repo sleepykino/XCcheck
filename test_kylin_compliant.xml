@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SystemInfo>
+  <Hostname>kylin-desktop-01</Hostname>
+  <IP>192.168.1.10</IP>
+  <CollectTime>2026-05-06 09:30:00</CollectTime>
+  <OS>
+    <Name>银河麒麟（桌面版）</Name>
+    <Version>V10</Version>
+    <Kernel>4.19.90-24.4.v2101.ky10.x86_64</Kernel>
+  </OS>
+  <CPU>
+    <Model>Loongson-3A5000</Model>
+    <Architecture>loongarch64</Architecture>
+    <Cores>4</Cores>
+  </CPU>
+</SystemInfo>
