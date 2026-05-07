@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPT_NAME="系统信息采集脚本"
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="1.2.0"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 DATE_STR=$(date '+%Y%m%d')
 HOSTNAME_VAL=$(hostname 2>/dev/null || echo "Unknown")
@@ -326,28 +326,50 @@ get_kernel_version() {
     echo "${kv:-Unknown}"
 }
 
-detect_db_single() {
+db_add() {
     local db_name="$1"
-    local cmd="$2"
-    local ver_cmd="$3"
-    local ver_pattern="$4"
+    local ver="$2"
+    if echo "$_DB_FOUND" | grep -qx "$db_name"; then
+        return
+    fi
+    if [ -n "$ver" ]; then
+        _DB_RESULTS="${_DB_RESULTS}${db_name}|${ver}"$'\n'
+    else
+        _DB_RESULTS="${_DB_RESULTS}${db_name}|"$'\n'
+    fi
+    _DB_FOUND="${_DB_FOUND}${db_name}"$'\n'
+}
+
+db_check_cmd() {
+    local db_name="$1"
+    shift
+    local cmd="$1"
+    shift
+    local ver_cmd="$*"
 
     if command -v "$cmd" >/dev/null 2>&1; then
         local ver=""
         if [ -n "$ver_cmd" ]; then
             ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
         fi
-        if [ -n "$ver" ]; then
-            echo "${db_name}|${ver}"
-        else
-            echo "${db_name}|"
-        fi
-        return 0
+        db_add "$db_name" "$ver"
     fi
-    return 1
 }
 
-detect_db_service() {
+db_check_dir() {
+    local db_name="$1"
+    shift
+    local dirs="$*"
+
+    for d in $dirs; do
+        if [ -d "$d" ]; then
+            db_add "$db_name" ""
+            return
+        fi
+    done
+}
+
+db_check_service() {
     local db_name="$1"
     local svc_pattern="$2"
     local ver_cmd="$3"
@@ -358,8 +380,8 @@ detect_db_service() {
             if [ -n "$ver_cmd" ]; then
                 ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
             fi
-            echo "${db_name}|${ver}"
-            return 0
+            db_add "$db_name" "$ver"
+            return
         fi
     fi
 
@@ -369,236 +391,234 @@ detect_db_service() {
             if [ -n "$ver_cmd" ]; then
                 ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
             fi
-            echo "${db_name}|${ver}"
-            return 0
+            db_add "$db_name" "$ver"
+            return
         fi
     fi
 
-    if [ -f /etc/init.d/"${svc_pattern}" ]; then
-        local ver=""
-        if [ -n "$ver_cmd" ]; then
-            ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+    for f in /etc/init.d/*"${svc_pattern}"*; do
+        if [ -f "$f" ]; then
+            local ver=""
+            if [ -n "$ver_cmd" ]; then
+                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            fi
+            db_add "$db_name" "$ver"
+            return
         fi
-        echo "${db_name}|${ver}"
-        return 0
-    fi
+    done
+}
 
-    return 1
+db_check_process() {
+    local db_name="$1"
+    local proc_pattern="$2"
+
+    if ! echo "$_DB_FOUND" | grep -qx "$db_name"; then
+        if ps -e -o comm= 2>/dev/null | grep -qi "$proc_pattern"; then
+            db_add "$db_name" ""
+            return
+        fi
+        if pgrep -l "$proc_pattern" >/dev/null 2>&1; then
+            db_add "$db_name" ""
+        fi
+    fi
+}
+
+db_check_port() {
+    local db_name="$1"
+    local port="$2"
+
+    if ! echo "$_DB_FOUND" | grep -qx "$db_name"; then
+        if command -v ss >/dev/null 2>&1; then
+            if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+                db_add "$db_name" ""
+                return
+            fi
+        fi
+        if command -v netstat >/dev/null 2>&1; then
+            if netstat -tlnp 2>/dev/null | grep -q ":${port} "; then
+                db_add "$db_name" ""
+            fi
+        fi
+    fi
 }
 
 detect_databases() {
-    local results=""
+    _DB_RESULTS=""
+    _DB_FOUND=""
 
-    detect_db_single "达梦" "dmserver" "dmserver -V" "" && results="${results}$(detect_db_single "达梦" "dmserver" "dmserver -V" "")
-    detect_db_single "达梦" "disql" "disql -V" "" && { [ -z "$results" ] && results="达梦|"; }
-
-    if [ -d /opt/dmdbms ] || [ -d /dmdbms ] || [ -d /opt/dameng ]; then
-        local ver=""
-        if [ -f /opt/dmdbms/bin/dmserver ]; then
-            ver=$(/opt/dmdbms/bin/dmserver -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        elif [ -d /dmdbms/bin ]; then
-            ver=$(/dmdbms/bin/dmserver -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+    db_check_cmd "达梦" "dmserver" "dmserver -V"
+    db_check_cmd "达梦" "disql" "disql -V"
+    db_check_dir "达梦" "/opt/dmdbms /dmdbms /opt/dameng"
+    for d in /opt/dmdbms/bin /dmdbms/bin; do
+        if [ -d "$d" ] && [ -f "$d/dmserver" ]; then
+            local ver=$("$d/dmserver" -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            if [ -n "$ver" ] && ! echo "$_DB_FOUND" | grep -qx "达梦"; then
+                db_add "达梦" "$ver"
+            fi
+            break
         fi
-        if ! echo "$results" | grep -q "达梦"; then
-            results="${results}达梦|${ver}"$'\n'
+    done
+    db_check_service "达梦" "dmserver" ""
+    db_check_process "达梦" "dmserver"
+
+    db_check_cmd "金仓" "kingbase" "kingbase -V"
+    db_check_cmd "金仓" "ksql" "ksql -V"
+    db_check_cmd "金仓" "sys_ctl" "sys_ctl -V"
+    db_check_dir "金仓" "/opt/Kingbase /opt/kingbase /usr/local/kingbase"
+    for d in /opt/Kingbase/ES/V8/Install/bin /opt/kingbase/bin; do
+        if [ -d "$d" ] && [ -f "$d/kingbase" ]; then
+            local ver=$("$d/kingbase" -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            if [ -n "$ver" ] && ! echo "$_DB_FOUND" | grep -qx "金仓"; then
+                db_add "金仓" "$ver"
+            fi
+            break
         fi
-    fi
+    done
+    db_check_service "金仓" "kingbase" ""
+    db_check_process "金仓" "kingbase"
 
-    if command -v ksql >/dev/null 2>&1 || command -v kingbase >/dev/null 2>&1 || command -v sys_ctl >/dev/null 2>&1; then
-        local ver=""
-        command -v kingbase >/dev/null 2>&1 && ver=$(kingbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        [ -z "$ver" ] && command -v ksql >/dev/null 2>&1 && ver=$(ksql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}金仓|${ver}"$'\n'
-    fi
-    if [ -d /opt/Kingbase ] || [ -d /opt/kingbase ] || [ -d /usr/local/kingbase ]; then
-        local ver=""
-        [ -f /opt/Kingbase/ES/V8/Install/bin/kingbase ] && ver=$(/opt/Kingbase/ES/V8/Install/bin/kingbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        [ -z "$ver" ] && [ -f /opt/kingbase/bin/kingbase ] && ver=$(/opt/kingbase/bin/kingbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        if ! echo "$results" | grep -q "金仓"; then
-            results="${results}金仓|${ver}"$'\n'
-        fi
-    fi
+    db_check_cmd "神舟通用" "osdb" "osdb -V"
+    db_check_cmd "神舟通用" "osci" ""
+    db_check_dir "神舟通用" "/opt/ShenTong /opt/shentong /usr/local/shentong"
+    db_check_service "神舟通用" "shentong" ""
+    db_check_process "神舟通用" "oscar\|osdb"
 
-    if command -v osdb >/dev/null 2>&1 || command -v osci >/dev/null 2>&1; then
-        local ver=""
-        command -v osdb >/dev/null 2>&1 && ver=$(osdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}神舟通用|${ver}"$'\n'
-    fi
-    if [ -d /opt/ShenTong ] || [ -d /opt/shentong ] || [ -d /usr/local/shentong ]; then
-        local ver=""
-        results="${results}神舟通用|${ver}"$'\n'
-    fi
+    db_check_cmd "瀚高" "hgdb" "hgdb -V"
+    db_check_cmd "瀚高" "hgdb-admin" ""
+    db_check_dir "瀚高" "/opt/highgo /usr/local/highgo"
+    db_check_service "瀚高" "highgo" ""
+    db_check_process "瀚高" "hgdb\|highgo"
 
-    if command -v hgdb >/dev/null 2>&1 || command -v hgdb-admin >/dev/null 2>&1; then
-        local ver=""
-        command -v hgdb >/dev/null 2>&1 && ver=$(hgdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}瀚高|${ver}"$'\n'
-    fi
-    if [ -d /opt/highgo ] || [ -d /usr/local/highgo ]; then
-        local ver=""
-        [ -f /opt/highgo/bin/hgdb ] && ver=$(/opt/highgo/bin/hgdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        if ! echo "$results" | grep -q "瀚高"; then
-            results="${results}瀚高|${ver}"$'\n'
-        fi
-    fi
+    db_check_cmd "南大通用" "gbase" "gbase -V"
+    db_check_cmd "南大通用" "gbasedbt" "gbasedbt -V"
+    db_check_dir "南大通用" "/opt/gbase /usr/local/gbase"
+    db_check_service "南大通用" "gbase" ""
+    db_check_process "南大通用" "gbase\|gbasedbt"
 
-    if command -v gbase >/dev/null 2>&1 || command -v gbasedbt >/dev/null 2>&1; then
-        local ver=""
-        command -v gbase >/dev/null 2>&1 && ver=$(gbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        [ -z "$ver" ] && command -v gbasedbt >/dev/null 2>&1 && ver=$(gbasedbt -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}南大通用|${ver}"$'\n'
-    fi
-    if [ -d /opt/gbase ] || [ -d /usr/local/gbase ]; then
-        local ver=""
-        if ! echo "$results" | grep -q "南大通用"; then
-            results="${results}南大通用|${ver}"$'\n'
-        fi
-    fi
+    db_check_cmd "优炫" "uxsql" "uxsql -V"
+    db_check_cmd "优炫" "uxdb" "uxdb -V"
+    db_check_dir "优炫" "/opt/uxdb /usr/local/uxdb"
+    db_check_service "优炫" "uxdb" ""
+    db_check_process "优炫" "uxdb"
 
-    if command -v uxsql >/dev/null 2>&1 || command -v uxdb >/dev/null 2>&1; then
-        local ver=""
-        command -v uxsql >/dev/null 2>&1 && ver=$(uxsql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        [ -z "$ver" ] && command -v uxdb >/dev/null 2>&1 && ver=$(uxdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}优炫|${ver}"$'\n'
-    fi
-    if [ -d /opt/uxdb ] || [ -d /usr/local/uxdb ]; then
-        local ver=""
-        if ! echo "$results" | grep -q "优炫"; then
-            results="${results}优炫|${ver}"$'\n'
+    db_check_cmd "海量" "vastbase" "vastbase -V"
+    db_check_cmd "海量" "vds_cli" ""
+    db_check_dir "海量" "/opt/vastbase /opt/hailiang"
+    db_check_service "海量" "vastbase" ""
+    db_check_process "海量" "vastbase\|vds"
+
+    db_check_cmd "阿里PolarDB" "polardb" "polardb -V"
+    db_check_dir "阿里PolarDB" "/opt/polardb /usr/local/polardb"
+    db_check_service "阿里PolarDB" "polardb" ""
+    db_check_process "阿里PolarDB" "polardb"
+    if command -v psql >/dev/null 2>&1; then
+        local psql_out
+        psql_out=$(psql --version 2>/dev/null | head -1)
+        if echo "$psql_out" | grep -qi "polardb"; then
+            local ver
+            ver=$(echo "$psql_out" | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            db_add "阿里PolarDB" "$ver"
         fi
     fi
 
-    if command -v vds_cli >/dev/null 2>&1 || command -v vastbase >/dev/null 2>&1; then
-        local ver=""
-        command -v vastbase >/dev/null 2>&1 && ver=$(vastbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}海量|${ver}"$'\n'
-    fi
-    if [ -d /opt/vastbase ] || [ -d /opt/hailiang ]; then
-        local ver=""
-        if ! echo "$results" | grep -q "海量"; then
-            results="${results}海量|${ver}"$'\n'
-        fi
+    db_check_cmd "腾讯TDSQL" "tdsql" "tdsql -V"
+    db_check_dir "腾讯TDSQL" "/opt/tdsql /usr/local/tdsql"
+    db_check_service "腾讯TDSQL" "tdsql" ""
+    db_check_process "腾讯TDSQL" "tdsql"
+
+    db_check_cmd "虚谷" "xugusql" "xugusql -V"
+    db_check_cmd "虚谷" "xugu" ""
+    db_check_dir "虚谷" "/opt/xugu /usr/local/xugu"
+    db_check_service "虚谷" "xugu" ""
+    db_check_process "虚谷" "xugu"
+
+    db_check_cmd "东方金信" "xdb" "xdb -V"
+    db_check_cmd "东方金信" "jxdb" ""
+    db_check_dir "东方金信" "/opt/jxserver /opt/dongfang"
+    db_check_service "东方金信" "jxserver" ""
+    db_check_process "东方金信" "jxdb"
+
+    db_check_cmd "万里开源" "greatsql" "greatsql -V"
+    db_check_cmd "万里开源" "greatdb" "greatdb -V"
+    db_check_dir "万里开源" "/opt/greatdb /opt/greatsql"
+    db_check_service "万里开源" "greatdb" ""
+    db_check_process "万里开源" "greatsql\|greatdb"
+
+    db_check_cmd "华为GaussDB" "gaussdb" "gaussdb -V"
+    db_check_cmd "华为GaussDB" "gs_ctl" "gs_ctl -V"
+    db_check_dir "华为GaussDB" "/opt/gaussdb /opt/huawei/gaussdb /var/lib/gaussdb"
+    db_check_service "华为GaussDB" "gaussdb" "gaussdb -V"
+    db_check_process "华为GaussDB" "gaussdb\|gs_ctl"
+
+    db_check_cmd "平凯" "tidb" "tidb -V"
+    db_check_cmd "平凯" "pingcap" ""
+    db_check_dir "平凯" "/opt/tidb /opt/pingcap"
+    db_check_service "平凯" "tidb" "tidb -V"
+    db_check_process "平凯" "tidb"
+
+    db_check_cmd "中兴GoldenDB" "goldendb" "goldendb -V"
+    db_check_dir "中兴GoldenDB" "/opt/goldendb /opt/zte/goldendb"
+    db_check_service "中兴GoldenDB" "goldendb" ""
+    db_check_process "中兴GoldenDB" "goldendb"
+
+    db_check_cmd "奥星贝斯" "observer" "observer -V"
+    db_check_dir "奥星贝斯" "/opt/oceanbase /usr/local/oceanbase"
+    db_check_service "奥星贝斯" "oceanbase\|observer" ""
+    db_check_process "奥星贝斯" "observer\|oceanbase"
+    db_check_port "奥星贝斯" "2881"
+
+    db_check_dir "TaurusDB" "/opt/taurusdb /opt/huawei/taurusdb"
+    db_check_service "TaurusDB" "taurusdb" ""
+    db_check_process "TaurusDB" "taurusdb"
+
+    db_check_cmd "MySQL" "mysql" "mysql --version"
+    db_check_cmd "MySQL" "mysqld" "mysqld --version"
+    db_check_service "MySQL" "mysql\|mysqld\|mariadb" ""
+    db_check_process "MySQL" "mysqld\|mariadbd"
+    db_check_port "MySQL" "3306"
+    if [ -d /var/lib/mysql ] || [ -d /var/lib/mysql/data ]; then
+        db_add "MySQL" ""
     fi
 
-    if command -v polardb >/dev/null 2>&1 || command -v psql 2>/dev/null | grep -qi polardb; then
-        local ver=""
-        command -v polardb >/dev/null 2>&1 && ver=$(polardb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}阿里PolarDB|${ver}"$'\n'
-    fi
-    if [ -d /opt/polardb ] || [ -d /usr/local/polardb ]; then
-        local ver=""
-        if ! echo "$results" | grep -q "阿里PolarDB"; then
-            results="${results}阿里PolarDB|${ver}"$'\n'
-        fi
+    db_check_cmd "PostgreSQL" "psql" "psql --version"
+    db_check_cmd "PostgreSQL" "postgres" "postgres --version"
+    db_check_service "PostgreSQL" "postgresql\|postgres" ""
+    db_check_process "PostgreSQL" "postgres"
+    db_check_port "PostgreSQL" "5432"
+    if [ -d /var/lib/pgsql ] || [ -d /var/lib/postgresql ]; then
+        db_add "PostgreSQL" ""
     fi
 
-    if command -v tdsql >/dev/null 2>&1; then
-        local ver=""
-        ver=$(tdsql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}腾讯TDSQL|${ver}"$'\n'
-    fi
-    detect_db_service "腾讯TDSQL" "tdsql" "" 2>/dev/null && { echo "$results" | grep -q "腾讯TDSQL" || results="${results}腾讯TDSQL|"$'\n'; }
-    if [ -d /opt/tdsql ] || [ -d /usr/local/tdsql ]; then
-        if ! echo "$results" | grep -q "腾讯TDSQL"; then
-            results="${results}腾讯TDSQL|"$'\n'
-        fi
-    fi
+    db_check_cmd "MariaDB" "mariadb" "mariadb --version"
+    db_check_cmd "MariaDB" "mariadbd" "mariadbd --version"
+    db_check_service "MariaDB" "mariadb" ""
+    db_check_process "MariaDB" "mariadbd"
+    db_check_port "MariaDB" "3307"
 
-    if command -v xugusql >/dev/null 2>&1 || command -v xugu >/dev/null 2>&1; then
-        local ver=""
-        command -v xugusql >/dev/null 2>&1 && ver=$(xugusql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}虚谷|${ver}"$'\n'
-    fi
-    if [ -d /opt/xugu ] || [ -d /usr/local/xugu ]; then
-        if ! echo "$results" | grep -q "虚谷"; then
-            results="${results}虚谷|"$'\n'
-        fi
-    fi
+    db_check_cmd "Oracle" "sqlplus" "sqlplus -V"
+    db_check_dir "Oracle" "/opt/oracle /u01/app/oracle /u01/app/oracle/product"
+    db_check_service "Oracle" "oracle\|oradb" ""
+    db_check_process "Oracle" "ora_pmon\|oracle"
+    db_check_port "Oracle" "1521"
 
-    if command -v xdb >/dev/null 2>&1 || command -v jxdb >/dev/null 2>&1; then
-        local ver=""
-        command -v xdb >/dev/null 2>&1 && ver=$(xdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}东方金信|${ver}"$'\n'
-    fi
-    if [ -d /opt/jxserver ] || [ -d /opt/dongfang ]; then
-        if ! echo "$results" | grep -q "东方金信"; then
-            results="${results}东方金信|"$'\n'
-        fi
-    fi
+    db_check_cmd "Redis" "redis-server" "redis-server --version"
+    db_check_cmd "Redis" "redis-cli" "redis-cli --version"
+    db_check_service "Redis" "redis" ""
+    db_check_process "Redis" "redis-server"
+    db_check_port "Redis" "6379"
 
-    if command -v greatdb >/dev/null 2>&1 || command -v greatsql >/dev/null 2>&1; then
-        local ver=""
-        command -v greatsql >/dev/null 2>&1 && ver=$(greatsql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}万里开源|${ver}"$'\n'
-    fi
-    if [ -d /opt/greatdb ] || [ -d /opt/greatsql ]; then
-        if ! echo "$results" | grep -q "万里开源"; then
-            results="${results}万里开源|"$'\n'
-        fi
-    fi
+    db_check_cmd "MongoDB" "mongod" "mongod --version"
+    db_check_cmd "MongoDB" "mongo" "mongo --version"
+    db_check_service "MongoDB" "mongod\|mongodb" ""
+    db_check_process "MongoDB" "mongod"
+    db_check_port "MongoDB" "27017"
 
-    if command -v gaussdb >/dev/null 2>&1 || command -v gs_ctl >/dev/null 2>&1; then
-        local ver=""
-        command -v gaussdb >/dev/null 2>&1 && ver=$(gaussdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        [ -z "$ver" ] && command -v gs_ctl >/dev/null 2>&1 && ver=$(gs_ctl -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}华为GaussDB|${ver}"$'\n'
-    fi
-    if [ -d /opt/gaussdb ] || [ -d /opt/huawei/gaussdb ] || [ -d /var/lib/gaussdb ]; then
-        if ! echo "$results" | grep -q "华为GaussDB"; then
-            results="${results}华为GaussDB|"$'\n'
-        fi
-    fi
-    detect_db_service "华为GaussDB" "gaussdb" "gaussdb -V" 2>/dev/null && { echo "$results" | grep -q "华为GaussDB" || results="${results}华为GaussDB|"$'\n'; }
+    _DB_RESULTS=$(echo "$_DB_RESULTS" | sed '/^$/d' | sort -u)
 
-    if command -v pingcap >/dev/null 2>&1 || command -v tidb >/dev/null 2>&1; then
-        local ver=""
-        command -v tidb >/dev/null 2>&1 && ver=$(tidb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}平凯|${ver}"$'\n'
-    fi
-    if [ -d /opt/tidb ] || [ -d /opt/pingcap ]; then
-        if ! echo "$results" | grep -q "平凯"; then
-            results="${results}平凯|"$'\n'
-        fi
-    fi
-    detect_db_service "平凯" "tidb" "tidb -V" 2>/dev/null && { echo "$results" | grep -q "平凯" || results="${results}平凯|"$'\n'; }
-
-    if command -v goldendb >/dev/null 2>&1; then
-        local ver=""
-        ver=$(goldendb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}中兴GoldenDB|${ver}"$'\n'
-    fi
-    if [ -d /opt/goldendb ] || [ -d /opt/zte/goldendb ]; then
-        if ! echo "$results" | grep -q "中兴GoldenDB"; then
-            results="${results}中兴GoldenDB|"$'\n'
-        fi
-    fi
-    detect_db_service "中兴GoldenDB" "goldendb" "" 2>/dev/null && { echo "$results" | grep -q "中兴GoldenDB" || results="${results}中兴GoldenDB|"$'\n'; }
-
-    if command -v oxbase >/dev/null 2>&1 || command -v oceanbase >/dev/null 2>&1; then
-        local ver=""
-        command -v observer >/dev/null 2>&1 && ver=$(observer -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
-        results="${results}奥星贝斯|${ver}"$'\n'
-    fi
-    if [ -d /opt/oceanbase ] || [ -d /usr/local/oceanbase ]; then
-        if ! echo "$results" | grep -q "奥星贝斯"; then
-            results="${results}奥星贝斯|"$'\n'
-        fi
-    fi
-    detect_db_service "奥星贝斯" "oceanbase\|observer" "" 2>/dev/null && { echo "$results" | grep -q "奥星贝斯" || results="${results}奥星贝斯|"$'\n'; }
-
-    detect_db_service "TaurusDB" "taurusdb\|taurus" "" 2>/dev/null && results="${results}TaurusDB|"$'\n'
-    if [ -d /opt/taurusdb ] || [ -d /opt/huawei/taurusdb ]; then
-        if ! echo "$results" | grep -q "TaurusDB"; then
-            results="${results}TaurusDB|"$'\n'
-        fi
-    fi
-
-    results=$(echo "$results" | sed '/^$/d' | sort -u)
-
-    if [ -z "$results" ]; then
+    if [ -z "$_DB_RESULTS" ]; then
         echo "不存在数据库"
     else
-        echo "$results"
+        echo "$_DB_RESULTS"
     fi
 }
 
