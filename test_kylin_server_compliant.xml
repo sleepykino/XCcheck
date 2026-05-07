@@ -13,4 +13,5 @@
     <Architecture>x86_64</Architecture>
     <Cores>40</Cores>
   </CPU>
+  <Database>不存在数据库</Database>
 </SystemInfo>

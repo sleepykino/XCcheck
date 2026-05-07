@@ -13,4 +13,5 @@
     <Architecture>loongarch64</Architecture>
     <Cores>4</Cores>
   </CPU>
+  <Database><Name>达梦</Name><Version>8.1</Version></Database>
 </SystemInfo>

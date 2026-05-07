@@ -490,6 +490,14 @@ body {
                     <textarea class="rule-textarea" id="rule_cpuArch" placeholder="每行一个合规的CPU架构，例如：&#10;x86_64&#10;aarch64&#10;loongarch64"></textarea>
                     <div class="rule-hint">对采集到的"CPU架构"字段进行合规匹配</div>
                 </div>
+                <div class="rule-group">
+                    <div class="rule-group-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                        数据库类型
+                    </div>
+                    <textarea class="rule-textarea" id="rule_dbName" placeholder="每行一个合规的数据库名称，例如：&#10;达梦&#10;金仓&#10;华为GaussDB"></textarea>
+                    <div class="rule-hint">对检测到的数据库类型进行合规匹配（任一数据库匹配即合规）</div>
+                </div>
             </div>
             <div class="compliance-actions">
                 <button class="btn" onclick="resetRules()">重置</button>
@@ -541,11 +549,12 @@ let complianceRules = {
     osName: [],
     osVersion: [],
     cpuModel: [],
-    cpuArch: []
+    cpuArch: [],
+    dbName: []
 };
 let complianceResults = {};
 
-const RULE_KEYS = ['osName', 'osVersion', 'cpuModel', 'cpuArch'];
+const RULE_KEYS = ['osName', 'osVersion', 'cpuModel', 'cpuArch', 'dbName'];
 const RULE_LABELS = { osName: '系统名称', osVersion: '系统版本', cpuModel: 'CPU型号', cpuArch: 'CPU架构' };
 
 const uploadZone = document.getElementById('uploadZone');
@@ -592,9 +601,23 @@ function parseXML(xmlStr, fileName) {
         cpuModel: getText(root, 'CPU > Model'),
         cpuArch: getText(root, 'CPU > Architecture'),
         cpuCores: getText(root, 'CPU > Cores'),
+        databases: parseDatabases(root),
         fileName: fileName,
         rawXML: xmlStr
     };
+
+    function parseDatabases(rootEl) {
+        const dbEls = rootEl.querySelectorAll('Database');
+        if (dbEls.length === 0) return [];
+        const dbs = [];
+        dbEls.forEach(el => {
+            const name = el.querySelector('Name') ? el.querySelector('Name').textContent.trim() : '';
+            if (name === '不存在数据库' || !name) return;
+            const ver = el.querySelector('Version') ? el.querySelector('Version').textContent.trim() : '';
+            dbs.push({ name: name, version: ver });
+        });
+        return dbs;
+    }
 }
 
 function getOSBadge(osName) {
@@ -640,6 +663,19 @@ function matchRule(value, ruleList) {
     return 'fail';
 }
 
+function matchDbRule(databases, ruleList) {
+    if (!ruleList || ruleList.length === 0) return 'na';
+    if (!databases || databases.length === 0) return 'fail';
+    for (const db of databases) {
+        for (const rule of ruleList) {
+            const r = rule.toLowerCase().trim();
+            const n = db.name.toLowerCase().trim();
+            if (n === r || n.includes(r) || r.includes(n)) return 'pass';
+        }
+    }
+    return 'fail';
+}
+
 function runComplianceCheck() {
     complianceResults = {};
     const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
@@ -653,7 +689,12 @@ function runComplianceCheck() {
         RULE_KEYS.forEach(key => {
             if (complianceRules[key].length > 0) {
                 anyChecked = true;
-                const status = matchRule(d[key], complianceRules[key]);
+                let status;
+                if (key === 'dbName') {
+                    status = matchDbRule(d.databases, complianceRules[key]);
+                } else {
+                    status = matchRule(d[key], complianceRules[key]);
+                }
                 itemResults[key] = status;
                 if (status === 'fail') overallPass = false;
             } else {
@@ -765,6 +806,29 @@ function valClass(status) {
     return '';
 }
 
+function renderDbSection(d, realIdx) {
+    const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
+    const dbStatus = hasAnyRule ? getItemStatus(realIdx, 'dbName') : 'na';
+    const dbs = d.databases;
+    const icon = hasAnyRule ? statusIcon(dbStatus) : '';
+    const cls = hasAnyRule ? valClass(dbStatus) : '';
+
+    if (!dbs || dbs.length === 0) {
+        return `<div class="info-row"><span class="info-label">数据库</span><span class="info-value${cls}">${icon} 不存在数据库</span></div>`;
+    }
+
+    let html = '';
+    dbs.forEach((db, i) => {
+        const verText = db.version ? ` ${db.version}` : '';
+        if (i === 0) {
+            html += `<div class="info-row"><span class="info-label">数据库</span><span class="info-value${cls}">${icon} ${esc(db.name)}${esc(verText)}</span></div>`;
+        } else {
+            html += `<div class="info-row"><span class="info-label"></span><span class="info-value${cls}">${esc(db.name)}${esc(verText)}</span></div>`;
+        }
+    });
+    return html;
+}
+
 function renderCards() {
     const query = searchInput.value.toLowerCase();
     let filtered = allData;
@@ -850,6 +914,13 @@ function renderCards() {
                 ${renderRow('架构', d.cpuArch, 'cpuArch')}
                 <div class="info-row"><span class="info-label">核心数</span><span class="info-value">${esc(d.cpuCores) || '-'}</span></div>
             </div>
+            <div class="card-section">
+                <div class="section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                    数据库
+                </div>
+                ${renderDbSection(d, realIdx)}
+            </div>
             <div class="card-footer">
                 <button class="btn-sm" onclick="viewXML(${realIdx})">查看XML</button>
                 <button class="btn-sm del" onclick="removeCard(${realIdx})">删除</button>
@@ -917,11 +988,12 @@ function exportCSV() {
     const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
 
     const BOM = '\uFEFF';
-    let header = '主机名,IP地址,采集时间,系统名称,系统版本,内核版本,CPU型号,CPU架构,CPU核心数,来源文件';
+    let header = '主机名,IP地址,采集时间,系统名称,系统版本,内核版本,CPU型号,CPU架构,CPU核心数,数据库,来源文件';
     let rows = allData.map(d => [
         csvCell(d.hostname), csvCell(d.ip), csvCell(d.collectTime),
         csvCell(d.osName), csvCell(d.osVersion), csvCell(d.kernel),
         csvCell(d.cpuModel), csvCell(d.cpuArch), csvCell(d.cpuCores),
+        csvCell(formatDbsForCsv(d.databases)),
         csvCell(d.fileName)
     ].join(','));
 
@@ -934,6 +1006,7 @@ function exportCSV() {
                 csvCell(d.hostname), csvCell(d.ip), csvCell(d.collectTime),
                 csvCell(d.osName), csvCell(d.osVersion), csvCell(d.kernel),
                 csvCell(d.cpuModel), csvCell(d.cpuArch), csvCell(d.cpuCores),
+                csvCell(formatDbsForCsv(d.databases)),
                 csvCell(d.fileName), csvCell(statusText)
             ].join(',');
         });
@@ -956,6 +1029,11 @@ function csvCell(val) {
         return '"' + val.replace(/"/g, '""') + '"';
     }
     return val;
+}
+
+function formatDbsForCsv(databases) {
+    if (!databases || databases.length === 0) return '不存在数据库';
+    return databases.map(db => db.version ? db.name + ' ' + db.version : db.name).join('; ');
 }
 
 function showToast(msg, type) {

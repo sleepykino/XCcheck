@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SystemInfo>
+  <Hostname>anolis-dev-05</Hostname>
+  <IP>192.168.1.20</IP>
+  <CollectTime>2026-05-06 15:30:00</CollectTime>
+  <OS>
+    <Name>龙蜥Anolis OS</Name>
+    <Version>8.6</Version>
+    <Kernel>5.10.0-8.an8.x86_64</Kernel>
+  </OS>
+  <CPU>
+    <Model>Intel Core i7-12700</Model>
+    <Architecture>x86_64</Architecture>
+    <Cores>20</Cores>
+  </CPU>
+  <Database><Name>MySQL</Name><Version>8.0.32</Version></Database>
+</SystemInfo>

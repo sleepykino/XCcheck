@@ -326,6 +326,282 @@ get_kernel_version() {
     echo "${kv:-Unknown}"
 }
 
+detect_db_single() {
+    local db_name="$1"
+    local cmd="$2"
+    local ver_cmd="$3"
+    local ver_pattern="$4"
+
+    if command -v "$cmd" >/dev/null 2>&1; then
+        local ver=""
+        if [ -n "$ver_cmd" ]; then
+            ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        fi
+        if [ -n "$ver" ]; then
+            echo "${db_name}|${ver}"
+        else
+            echo "${db_name}|"
+        fi
+        return 0
+    fi
+    return 1
+}
+
+detect_db_service() {
+    local db_name="$1"
+    local svc_pattern="$2"
+    local ver_cmd="$3"
+
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl list-units --type=service --all 2>/dev/null | grep -qi "$svc_pattern"; then
+            local ver=""
+            if [ -n "$ver_cmd" ]; then
+                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            fi
+            echo "${db_name}|${ver}"
+            return 0
+        fi
+    fi
+
+    if command -v service >/dev/null 2>&1; then
+        if service --status-all 2>/dev/null | grep -qi "$svc_pattern"; then
+            local ver=""
+            if [ -n "$ver_cmd" ]; then
+                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            fi
+            echo "${db_name}|${ver}"
+            return 0
+        fi
+    fi
+
+    if [ -f /etc/init.d/"${svc_pattern}" ]; then
+        local ver=""
+        if [ -n "$ver_cmd" ]; then
+            ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        fi
+        echo "${db_name}|${ver}"
+        return 0
+    fi
+
+    return 1
+}
+
+detect_databases() {
+    local results=""
+
+    detect_db_single "达梦" "dmserver" "dmserver -V" "" && results="${results}$(detect_db_single "达梦" "dmserver" "dmserver -V" "")
+    detect_db_single "达梦" "disql" "disql -V" "" && { [ -z "$results" ] && results="达梦|"; }
+
+    if [ -d /opt/dmdbms ] || [ -d /dmdbms ] || [ -d /opt/dameng ]; then
+        local ver=""
+        if [ -f /opt/dmdbms/bin/dmserver ]; then
+            ver=$(/opt/dmdbms/bin/dmserver -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        elif [ -d /dmdbms/bin ]; then
+            ver=$(/dmdbms/bin/dmserver -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        fi
+        if ! echo "$results" | grep -q "达梦"; then
+            results="${results}达梦|${ver}"$'\n'
+        fi
+    fi
+
+    if command -v ksql >/dev/null 2>&1 || command -v kingbase >/dev/null 2>&1 || command -v sys_ctl >/dev/null 2>&1; then
+        local ver=""
+        command -v kingbase >/dev/null 2>&1 && ver=$(kingbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        [ -z "$ver" ] && command -v ksql >/dev/null 2>&1 && ver=$(ksql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}金仓|${ver}"$'\n'
+    fi
+    if [ -d /opt/Kingbase ] || [ -d /opt/kingbase ] || [ -d /usr/local/kingbase ]; then
+        local ver=""
+        [ -f /opt/Kingbase/ES/V8/Install/bin/kingbase ] && ver=$(/opt/Kingbase/ES/V8/Install/bin/kingbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        [ -z "$ver" ] && [ -f /opt/kingbase/bin/kingbase ] && ver=$(/opt/kingbase/bin/kingbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        if ! echo "$results" | grep -q "金仓"; then
+            results="${results}金仓|${ver}"$'\n'
+        fi
+    fi
+
+    if command -v osdb >/dev/null 2>&1 || command -v osci >/dev/null 2>&1; then
+        local ver=""
+        command -v osdb >/dev/null 2>&1 && ver=$(osdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}神舟通用|${ver}"$'\n'
+    fi
+    if [ -d /opt/ShenTong ] || [ -d /opt/shentong ] || [ -d /usr/local/shentong ]; then
+        local ver=""
+        results="${results}神舟通用|${ver}"$'\n'
+    fi
+
+    if command -v hgdb >/dev/null 2>&1 || command -v hgdb-admin >/dev/null 2>&1; then
+        local ver=""
+        command -v hgdb >/dev/null 2>&1 && ver=$(hgdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}瀚高|${ver}"$'\n'
+    fi
+    if [ -d /opt/highgo ] || [ -d /usr/local/highgo ]; then
+        local ver=""
+        [ -f /opt/highgo/bin/hgdb ] && ver=$(/opt/highgo/bin/hgdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        if ! echo "$results" | grep -q "瀚高"; then
+            results="${results}瀚高|${ver}"$'\n'
+        fi
+    fi
+
+    if command -v gbase >/dev/null 2>&1 || command -v gbasedbt >/dev/null 2>&1; then
+        local ver=""
+        command -v gbase >/dev/null 2>&1 && ver=$(gbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        [ -z "$ver" ] && command -v gbasedbt >/dev/null 2>&1 && ver=$(gbasedbt -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}南大通用|${ver}"$'\n'
+    fi
+    if [ -d /opt/gbase ] || [ -d /usr/local/gbase ]; then
+        local ver=""
+        if ! echo "$results" | grep -q "南大通用"; then
+            results="${results}南大通用|${ver}"$'\n'
+        fi
+    fi
+
+    if command -v uxsql >/dev/null 2>&1 || command -v uxdb >/dev/null 2>&1; then
+        local ver=""
+        command -v uxsql >/dev/null 2>&1 && ver=$(uxsql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        [ -z "$ver" ] && command -v uxdb >/dev/null 2>&1 && ver=$(uxdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}优炫|${ver}"$'\n'
+    fi
+    if [ -d /opt/uxdb ] || [ -d /usr/local/uxdb ]; then
+        local ver=""
+        if ! echo "$results" | grep -q "优炫"; then
+            results="${results}优炫|${ver}"$'\n'
+        fi
+    fi
+
+    if command -v vds_cli >/dev/null 2>&1 || command -v vastbase >/dev/null 2>&1; then
+        local ver=""
+        command -v vastbase >/dev/null 2>&1 && ver=$(vastbase -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}海量|${ver}"$'\n'
+    fi
+    if [ -d /opt/vastbase ] || [ -d /opt/hailiang ]; then
+        local ver=""
+        if ! echo "$results" | grep -q "海量"; then
+            results="${results}海量|${ver}"$'\n'
+        fi
+    fi
+
+    if command -v polardb >/dev/null 2>&1 || command -v psql 2>/dev/null | grep -qi polardb; then
+        local ver=""
+        command -v polardb >/dev/null 2>&1 && ver=$(polardb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}阿里PolarDB|${ver}"$'\n'
+    fi
+    if [ -d /opt/polardb ] || [ -d /usr/local/polardb ]; then
+        local ver=""
+        if ! echo "$results" | grep -q "阿里PolarDB"; then
+            results="${results}阿里PolarDB|${ver}"$'\n'
+        fi
+    fi
+
+    if command -v tdsql >/dev/null 2>&1; then
+        local ver=""
+        ver=$(tdsql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}腾讯TDSQL|${ver}"$'\n'
+    fi
+    detect_db_service "腾讯TDSQL" "tdsql" "" 2>/dev/null && { echo "$results" | grep -q "腾讯TDSQL" || results="${results}腾讯TDSQL|"$'\n'; }
+    if [ -d /opt/tdsql ] || [ -d /usr/local/tdsql ]; then
+        if ! echo "$results" | grep -q "腾讯TDSQL"; then
+            results="${results}腾讯TDSQL|"$'\n'
+        fi
+    fi
+
+    if command -v xugusql >/dev/null 2>&1 || command -v xugu >/dev/null 2>&1; then
+        local ver=""
+        command -v xugusql >/dev/null 2>&1 && ver=$(xugusql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}虚谷|${ver}"$'\n'
+    fi
+    if [ -d /opt/xugu ] || [ -d /usr/local/xugu ]; then
+        if ! echo "$results" | grep -q "虚谷"; then
+            results="${results}虚谷|"$'\n'
+        fi
+    fi
+
+    if command -v xdb >/dev/null 2>&1 || command -v jxdb >/dev/null 2>&1; then
+        local ver=""
+        command -v xdb >/dev/null 2>&1 && ver=$(xdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}东方金信|${ver}"$'\n'
+    fi
+    if [ -d /opt/jxserver ] || [ -d /opt/dongfang ]; then
+        if ! echo "$results" | grep -q "东方金信"; then
+            results="${results}东方金信|"$'\n'
+        fi
+    fi
+
+    if command -v greatdb >/dev/null 2>&1 || command -v greatsql >/dev/null 2>&1; then
+        local ver=""
+        command -v greatsql >/dev/null 2>&1 && ver=$(greatsql -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}万里开源|${ver}"$'\n'
+    fi
+    if [ -d /opt/greatdb ] || [ -d /opt/greatsql ]; then
+        if ! echo "$results" | grep -q "万里开源"; then
+            results="${results}万里开源|"$'\n'
+        fi
+    fi
+
+    if command -v gaussdb >/dev/null 2>&1 || command -v gs_ctl >/dev/null 2>&1; then
+        local ver=""
+        command -v gaussdb >/dev/null 2>&1 && ver=$(gaussdb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        [ -z "$ver" ] && command -v gs_ctl >/dev/null 2>&1 && ver=$(gs_ctl -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}华为GaussDB|${ver}"$'\n'
+    fi
+    if [ -d /opt/gaussdb ] || [ -d /opt/huawei/gaussdb ] || [ -d /var/lib/gaussdb ]; then
+        if ! echo "$results" | grep -q "华为GaussDB"; then
+            results="${results}华为GaussDB|"$'\n'
+        fi
+    fi
+    detect_db_service "华为GaussDB" "gaussdb" "gaussdb -V" 2>/dev/null && { echo "$results" | grep -q "华为GaussDB" || results="${results}华为GaussDB|"$'\n'; }
+
+    if command -v pingcap >/dev/null 2>&1 || command -v tidb >/dev/null 2>&1; then
+        local ver=""
+        command -v tidb >/dev/null 2>&1 && ver=$(tidb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}平凯|${ver}"$'\n'
+    fi
+    if [ -d /opt/tidb ] || [ -d /opt/pingcap ]; then
+        if ! echo "$results" | grep -q "平凯"; then
+            results="${results}平凯|"$'\n'
+        fi
+    fi
+    detect_db_service "平凯" "tidb" "tidb -V" 2>/dev/null && { echo "$results" | grep -q "平凯" || results="${results}平凯|"$'\n'; }
+
+    if command -v goldendb >/dev/null 2>&1; then
+        local ver=""
+        ver=$(goldendb -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}中兴GoldenDB|${ver}"$'\n'
+    fi
+    if [ -d /opt/goldendb ] || [ -d /opt/zte/goldendb ]; then
+        if ! echo "$results" | grep -q "中兴GoldenDB"; then
+            results="${results}中兴GoldenDB|"$'\n'
+        fi
+    fi
+    detect_db_service "中兴GoldenDB" "goldendb" "" 2>/dev/null && { echo "$results" | grep -q "中兴GoldenDB" || results="${results}中兴GoldenDB|"$'\n'; }
+
+    if command -v oxbase >/dev/null 2>&1 || command -v oceanbase >/dev/null 2>&1; then
+        local ver=""
+        command -v observer >/dev/null 2>&1 && ver=$(observer -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+        results="${results}奥星贝斯|${ver}"$'\n'
+    fi
+    if [ -d /opt/oceanbase ] || [ -d /usr/local/oceanbase ]; then
+        if ! echo "$results" | grep -q "奥星贝斯"; then
+            results="${results}奥星贝斯|"$'\n'
+        fi
+    fi
+    detect_db_service "奥星贝斯" "oceanbase\|observer" "" 2>/dev/null && { echo "$results" | grep -q "奥星贝斯" || results="${results}奥星贝斯|"$'\n'; }
+
+    detect_db_service "TaurusDB" "taurusdb\|taurus" "" 2>/dev/null && results="${results}TaurusDB|"$'\n'
+    if [ -d /opt/taurusdb ] || [ -d /opt/huawei/taurusdb ]; then
+        if ! echo "$results" | grep -q "TaurusDB"; then
+            results="${results}TaurusDB|"$'\n'
+        fi
+    fi
+
+    results=$(echo "$results" | sed '/^$/d' | sort -u)
+
+    if [ -z "$results" ]; then
+        echo "不存在数据库"
+    else
+        echo "$results"
+    fi
+}
+
 xml_escape() {
     local s="$1"
     s=$(echo "$s" | sed 's/&/\&amp;/g')
@@ -347,6 +623,7 @@ CPU_MODEL=$(get_cpu_model)
 CPU_ARCH=$(get_cpu_arch)
 CPU_CORES=$(get_cpu_cores)
 KERNEL_VERSION=$(get_kernel_version)
+DB_RESULT=$(detect_databases)
 
 echo "[*] 系统名称:    ${OS_NAME}"
 echo "[*] 系统版本:    ${OS_VERSION}"
@@ -356,6 +633,7 @@ echo "[*] CPU架构:     ${CPU_ARCH}"
 echo "[*] CPU核心数:   ${CPU_CORES}"
 echo "[*] 主机名:      ${HOSTNAME_VAL}"
 echo "[*] IP地址:      ${IP_ADDR}"
+echo "[*] 数据库:      ${DB_RESULT}"
 echo "[*] 采集时间:    ${TIMESTAMP}"
 echo ""
 
@@ -371,6 +649,25 @@ KERNEL_VERSION_E=$(xml_escape "$KERNEL_VERSION")
 HOSTNAME_E=$(xml_escape "$HOSTNAME_VAL")
 IP_ADDR_E=$(xml_escape "$IP_ADDR")
 TIMESTAMP_E=$(xml_escape "$TIMESTAMP")
+
+DB_XML="  <Database>不存在数据库</Database>"
+
+if [ "$DB_RESULT" != "不存在数据库" ]; then
+    DB_XML=""
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        db_name=$(echo "$line" | cut -d'|' -f1)
+        db_ver=$(echo "$line" | cut -d'|' -f2)
+        db_name_e=$(xml_escape "$db_name")
+        db_ver_e=$(xml_escape "$db_ver")
+        if [ -n "$db_ver_e" ]; then
+            DB_XML="${DB_XML}  <Database><Name>${db_name_e}</Name><Version>${db_ver_e}</Version></Database>"$'\n'
+        else
+            DB_XML="${DB_XML}  <Database><Name>${db_name_e}</Name><Version/></Database>"$'\n'
+        fi
+    done <<< "$DB_RESULT"
+    DB_XML=$(echo "$DB_XML" | sed '/^$/d')
+fi
 
 cat > "$OUTPUT_FILE" << XMLEOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -388,6 +685,7 @@ cat > "$OUTPUT_FILE" << XMLEOF
     <Architecture>${CPU_ARCH_E}</Architecture>
     <Cores>${CPU_CORES_E}</Cores>
   </CPU>
+${DB_XML}
 </SystemInfo>
 XMLEOF
 

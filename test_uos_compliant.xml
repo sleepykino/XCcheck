@@ -13,4 +13,5 @@
     <Architecture>aarch64</Architecture>
     <Cores>96</Cores>
   </CPU>
+  <Database><Name>金仓</Name><Version>V8R6</Version></Database>
 </SystemInfo>
