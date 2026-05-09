@@ -498,6 +498,20 @@ body {
                     <textarea class="rule-textarea" id="rule_dbName" placeholder="每行一个合规的数据库名称，例如：&#10;达梦&#10;金仓&#10;华为GaussDB"></textarea>
                     <div class="rule-hint">对检测到的数据库类型进行合规匹配（任一数据库匹配即合规），非信创数据库（MySQL、Oracle等）也会被检测</div>
                 </div>
+                <div class="rule-group">
+                    <div class="rule-label">
+                        双系统
+                    </div>
+                    <textarea class="rule-textarea" id="rule_dualBoot" placeholder="填写合规的双系统标志，例如：&#10;否&#10;（表示不允许存在双系统）"></textarea>
+                    <div class="rule-hint">填写合规的值，通常填"否"表示不允许存在双系统，填"是"表示允许</div>
+                </div>
+                <div class="rule-group">
+                    <div class="rule-label">
+                        机器品牌
+                    </div>
+                    <textarea class="rule-textarea" id="rule_machineVendor" placeholder="每行一个合规的机器品牌，例如：&#10;联想&#10;华为&#10;戴尔"></textarea>
+                    <div class="rule-hint">对检测到的机器品牌进行合规匹配</div>
+                </div>
             </div>
             <div class="compliance-actions">
                 <button class="btn" onclick="resetRules()">重置</button>
@@ -550,12 +564,14 @@ let complianceRules = {
     osVersion: [],
     cpuModel: [],
     cpuArch: [],
-    dbName: []
+    dbName: [],
+    dualBoot: [],
+    machineVendor: []
 };
 let complianceResults = {};
 
-const RULE_KEYS = ['osName', 'osVersion', 'cpuModel', 'cpuArch', 'dbName'];
-const RULE_LABELS = { osName: '系统名称', osVersion: '系统版本', cpuModel: 'CPU型号', cpuArch: 'CPU架构' };
+const RULE_KEYS = ['osName', 'osVersion', 'cpuModel', 'cpuArch', 'dbName', 'dualBoot', 'machineVendor'];
+const RULE_LABELS = { osName: '系统名称', osVersion: '系统版本', cpuModel: 'CPU型号', cpuArch: 'CPU架构', dualBoot: '双系统', machineVendor: '机器品牌' };
 
 const uploadZone = document.getElementById('uploadZone');
 const fileInput = document.getElementById('fileInput');
@@ -601,6 +617,9 @@ function parseXML(xmlStr, fileName) {
         cpuModel: getText(root, 'CPU > Model'),
         cpuArch: getText(root, 'CPU > Architecture'),
         cpuCores: getText(root, 'CPU > Cores'),
+        dualBootFlag: getText(root, 'DualBoot > Flag'),
+        dualBootOS: getText(root, 'DualBoot > OS'),
+        machineVendor: getText(root, 'MachineVendor'),
         databases: parseDatabases(root),
         fileName: fileName,
         rawXML: xmlStr
@@ -676,6 +695,16 @@ function matchDbRule(databases, ruleList) {
     return 'fail';
 }
 
+function matchDualBootRule(flag, ruleList) {
+    if (!ruleList || ruleList.length === 0) return 'na';
+    const val = (flag || '否').trim().toLowerCase();
+    for (const rule of ruleList) {
+        const r = rule.toLowerCase().trim();
+        if (val === r || val.includes(r) || r.includes(val)) return 'pass';
+    }
+    return 'fail';
+}
+
 function runComplianceCheck() {
     complianceResults = {};
     const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
@@ -692,6 +721,8 @@ function runComplianceCheck() {
                 let status;
                 if (key === 'dbName') {
                     status = matchDbRule(d.databases, complianceRules[key]);
+                } else if (key === 'dualBoot') {
+                    status = matchDualBootRule(d.dualBootFlag, complianceRules[key]);
                 } else {
                     status = matchRule(d[key], complianceRules[key]);
                 }
@@ -916,6 +947,14 @@ function renderCards() {
             </div>
             <div class="card-section">
                 <div class="section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    其他信息
+                </div>
+                ${renderRow('双系统', (d.dualBootFlag === '是' && d.dualBootOS) ? '是 (' + d.dualBootOS + ')' : (d.dualBootFlag || '否'), 'dualBoot')}
+                ${renderRow('机器品牌', d.machineVendor, 'machineVendor')}
+            </div>
+            <div class="card-section">
+                <div class="section-title">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
                     数据库
                 </div>
@@ -988,11 +1027,13 @@ function exportCSV() {
     const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
 
     const BOM = '\uFEFF';
-    let header = '主机名,IP地址,采集时间,系统名称,系统版本,内核版本,CPU型号,CPU架构,CPU核心数,数据库,来源文件';
+    let header = '主机名,IP地址,采集时间,系统名称,系统版本,内核版本,CPU型号,CPU架构,CPU核心数,双系统,机器品牌,数据库,来源文件';
     let rows = allData.map(d => [
         csvCell(d.hostname), csvCell(d.ip), csvCell(d.collectTime),
         csvCell(d.osName), csvCell(d.osVersion), csvCell(d.kernel),
         csvCell(d.cpuModel), csvCell(d.cpuArch), csvCell(d.cpuCores),
+        csvCell(d.dualBootFlag === '是' && d.dualBootOS ? '是(' + d.dualBootOS + ')' : (d.dualBootFlag || '否')),
+        csvCell(d.machineVendor),
         csvCell(formatDbsForCsv(d.databases)),
         csvCell(d.fileName)
     ].join(','));
@@ -1006,6 +1047,8 @@ function exportCSV() {
                 csvCell(d.hostname), csvCell(d.ip), csvCell(d.collectTime),
                 csvCell(d.osName), csvCell(d.osVersion), csvCell(d.kernel),
                 csvCell(d.cpuModel), csvCell(d.cpuArch), csvCell(d.cpuCores),
+                csvCell(d.dualBootFlag === '是' && d.dualBootOS ? '是(' + d.dualBootOS + ')' : (d.dualBootFlag || '否')),
+                csvCell(d.machineVendor),
                 csvCell(formatDbsForCsv(d.databases)),
                 csvCell(d.fileName), csvCell(statusText)
             ].join(',');

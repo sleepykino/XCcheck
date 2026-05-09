@@ -13,5 +13,10 @@
     <Architecture>aarch64</Architecture>
     <Cores>96</Cores>
   </CPU>
+  <DualBoot>
+    <Flag>否</Flag>
+    <OS></OS>
+  </DualBoot>
+  <MachineVendor>华为</MachineVendor>
   <Database><Name>金仓</Name><Version>V8R6</Version></Database>
 </SystemInfo>

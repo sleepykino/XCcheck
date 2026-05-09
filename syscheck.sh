@@ -335,6 +335,197 @@ get_kernel_version() {
     echo "${kv:-Unknown}"
 }
 
+check_dual_boot() {
+    local result="否"
+    local found_os=""
+
+    if [ -f /boot/grub2/grub.cfg ]; then
+        local grub_out
+        grub_out=$(grep -i "menuentry\|windows" /boot/grub2/grub.cfg 2>/dev/null)
+        if echo "$grub_out" | grep -qi "windows"; then
+            result="是"
+            found_os="Windows"
+        fi
+    fi
+
+    if [ "$result" = "否" ] && [ -f /boot/grub/grub.cfg ]; then
+        local grub_out
+        grub_out=$(grep -i "menuentry\|windows" /boot/grub/grub.cfg 2>/dev/null)
+        if echo "$grub_out" | grep -qi "windows"; then
+            result="是"
+            found_os="Windows"
+        fi
+    fi
+
+    if [ "$result" = "否" ] && [ -f /boot/efi/EFI ]; then
+        local efi_out
+        efi_out=$(ls /boot/efi/EFI/ 2>/dev/null)
+        if echo "$efi_out" | grep -qi "windows\|Microsoft"; then
+            result="是"
+            found_os="Windows"
+        fi
+    fi
+
+    if [ "$result" = "否" ] && [ -d /sys/firmware/efi ]; then
+        for d in /boot/efi/EFI/*/; do
+            if [ -d "$d" ]; then
+                local dirname
+                dirname=$(basename "$d")
+                case "$dirname" in
+                    microsoft|Microsoft|Windows|windows)
+                        result="是"
+                        found_os="Windows"
+                        break
+                        ;;
+                    BOOT|boot|kylin|Kylin|uos|UOS|deepin|Deepin|openEuler|centos|ubuntu|fedora)
+                        ;;
+                    *)
+                        if [ "$result" = "否" ]; then
+                            result="是"
+                            found_os="$dirname"
+                        fi
+                        ;;
+                esac
+            fi
+        done
+    fi
+
+    if [ "$result" = "否" ]; then
+        if command -v efibootmgr >/dev/null 2>&1; then
+            local efi_boot
+            efi_boot=$(efibootmgr 2>/dev/null)
+            if echo "$efi_boot" | grep -qi "windows\|microsoft"; then
+                result="是"
+                found_os="Windows"
+            elif echo "$efi_boot" | grep -qi "BootOrder"; then
+                local boot_count
+                boot_count=$(echo "$efi_boot" | grep -c "^Boot[0-9]")
+                if [ "$boot_count" -gt 1 ]; then
+                    local other_boot
+                    other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|linux\|deepin\|uos\|openeuler\|euler\|centos\|ubuntu\|fedora\|shell" | head -1)
+                    if [ -n "$other_boot" ]; then
+                        result="是"
+                        found_os=$(echo "$other_boot" | sed 's/^Boot[0-9]\+\**\s*//')
+                    fi
+                fi
+            fi
+        fi
+    fi
+
+    if [ "$result" = "否" ] && [ -f /etc/grub.d/30_os-prober ]; then
+        if [ -x /usr/bin/os-prober ] || [ -x /sbin/os-prober ]; then
+            local prober_out
+            prober_out=$(os-prober 2>/dev/null)
+            if [ -n "$prober_out" ]; then
+                result="是"
+                found_os=$(echo "$prober_out" | head -1 | cut -d: -f2 | sed 's/,.*//')
+            fi
+        fi
+    fi
+
+    if [ "$result" = "否" ] && command -v blkid >/dev/null 2>&1; then
+        local ntfs_parts
+        ntfs_parts=$(blkid 2>/dev/null | grep -i "ntfs\|microsoft\|windows" | head -1)
+        if [ -n "$ntfs_parts" ]; then
+            result="是"
+            found_os="Windows(NTFS分区)"
+        fi
+    fi
+
+    if [ -n "$found_os" ]; then
+        echo "${result}|${found_os}"
+    else
+        echo "${result}|"
+    fi
+}
+
+get_machine_vendor() {
+    local vendor=""
+
+    if [ -f /sys/devices/virtual/dmi/id/sys_vendor ]; then
+        vendor=$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$vendor" ] && [ -f /sys/devices/virtual/dmi/id/board_vendor ]; then
+        vendor=$(cat /sys/devices/virtual/dmi/id/board_vendor 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$vendor" ] && [ -f /sys/devices/virtual/dmi/id/chassis_vendor ]; then
+        vendor=$(cat /sys/devices/virtual/dmi/id/chassis_vendor 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$vendor" ] && command -v dmidecode >/dev/null 2>&1; then
+        vendor=$(dmidecode -s system-manufacturer 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$vendor" ] && [ -f /sys/devices/virtual/dmi/id/product_name ]; then
+        local product
+        product=$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null)
+        if echo "$product" | grep -qi "lenovo\|thinkpad\|ideapad\|legion"; then
+            vendor="Lenovo"
+        elif echo "$product" | grep -qi "huawei\|matebook"; then
+            vendor="Huawei"
+        elif echo "$product" | grep -qi "dell\|inspiron\|latitude\|optiplex\|poweredge"; then
+            vendor="Dell"
+        elif echo "$product" | grep -qi "hp\|probook\|elitebook\|prodesk"; then
+            vendor="HP"
+        elif echo "$product" | grep -qi "asus\|rog\|zenbook"; then
+            vendor="ASUS"
+        elif echo "$product" | grep -qi "acer\|swift\|predator"; then
+            vendor="Acer"
+        elif echo "$product" | grep -qi "hasee"; then
+            vendor="Hasee"
+        elif echo "$product" | grep -qi "thinkvision"; then
+            vendor="Lenovo"
+        fi
+    fi
+
+    if [ -n "$vendor" ]; then
+        case "$vendor" in
+            "LENOVO"|"Lenovo"|"lenovo")
+                vendor="联想";;
+            "HUAWEI"|"Huawei"|"huawei")
+                vendor="华为";;
+            "DELL"|"Dell"|"dell")
+                vendor="戴尔";;
+            "HP"|"Hewlett-Packard"|"Hewlett Packard")
+                vendor="惠普";;
+            "ASUS"|"Asus"|"asus"|"ASUSTeK COMPUTER INC."|"ASUSTeK")
+                vendor="华硕";;
+            "ACER"|"Acer"|"acer")
+                vendor="宏碁";;
+            "Hasee"|"hasee"|"HASEE")
+                vendor="神舟";;
+            "Inspur"|"inspur"|"INSPUR")
+                vendor="浪潮";;
+            "Lenovo"|"lenovo"|"LENOVO")
+                vendor="联想";;
+            "Sugon"|"sugon"|"SUGON")
+                vendor="曙光";;
+            "Great Wall"|"GREAT WALL"|"GreatWall"|"greatwall")
+                vendor="长城";;
+            "PowerLeader"|"powerleader"|"POWERLEADER")
+                vendor="宝德";;
+            "UniCloud"|"unicloud"|"UNICLOUD")
+                vendor="紫光";;
+            "H3C"|"h3c"|"H3C")
+                vendor="新华三";;
+            "ZTE"|"zte"|"ZTE Corporation")
+                vendor="中兴";;
+            "Fujitsu"|"fujitsu"|"FUJITSU")
+                vendor="富士通";;
+            "Samsung"|"samsung"|"SAMSUNG")
+                vendor="三星";;
+            "Tongfang"|"tongfang"|"TONGFANG"|"Tsinghua Tongfang")
+                vendor="清华同方";;
+            "Haier"|"haier"|"HAIER")
+                vendor="海尔";;
+        esac
+    fi
+
+    echo "${vendor:-Unknown}"
+}
+
 db_add() {
     local db_name="$1"
     local ver="$2"
@@ -719,6 +910,8 @@ CPU_MODEL=$(get_cpu_model)
 CPU_ARCH=$(get_cpu_arch)
 CPU_CORES=$(get_cpu_cores)
 KERNEL_VERSION=$(get_kernel_version)
+DUAL_BOOT=$(check_dual_boot)
+MACHINE_VENDOR=$(get_machine_vendor)
 DB_RESULT=$(detect_databases)
 
 echo "[*] 系统名称:    ${OS_NAME}"
@@ -730,6 +923,8 @@ echo "[*] CPU核心数:   ${CPU_CORES}"
 echo "[*] 主机名:      ${HOSTNAME_VAL}"
 echo "[*] IP地址:      ${IP_ADDR}"
 echo "[*] 数据库:      ${DB_RESULT}"
+echo "[*] 双系统:      ${DUAL_BOOT}"
+echo "[*] 机器品牌:    ${MACHINE_VENDOR}"
 echo "[*] 采集时间:    ${TIMESTAMP}"
 echo ""
 
@@ -745,6 +940,12 @@ KERNEL_VERSION_E=$(xml_escape "$KERNEL_VERSION")
 HOSTNAME_E=$(xml_escape "$HOSTNAME_VAL")
 IP_ADDR_E=$(xml_escape "$IP_ADDR")
 TIMESTAMP_E=$(xml_escape "$TIMESTAMP")
+
+DUAL_BOOT_FLAG=$(echo "$DUAL_BOOT" | cut -d'|' -f1)
+DUAL_BOOT_OS=$(echo "$DUAL_BOOT" | cut -d'|' -f2)
+DUAL_BOOT_FLAG_E=$(xml_escape "$DUAL_BOOT_FLAG")
+DUAL_BOOT_OS_E=$(xml_escape "$DUAL_BOOT_OS")
+MACHINE_VENDOR_E=$(xml_escape "$MACHINE_VENDOR")
 
 DB_XML="  <Database>不存在数据库</Database>"
 
@@ -781,6 +982,11 @@ cat > "$OUTPUT_FILE" << XMLEOF
     <Architecture>${CPU_ARCH_E}</Architecture>
     <Cores>${CPU_CORES_E}</Cores>
   </CPU>
+  <DualBoot>
+    <Flag>${DUAL_BOOT_FLAG_E}</Flag>
+    <OS>${DUAL_BOOT_OS_E}</OS>
+  </DualBoot>
+  <MachineVendor>${MACHINE_VENDOR_E}</MachineVendor>
 ${DB_XML}
 </SystemInfo>
 XMLEOF
