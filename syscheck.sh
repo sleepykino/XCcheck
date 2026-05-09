@@ -180,12 +180,12 @@ get_os_version() {
     fi
 
     if [ -f /etc/kylin-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/kylin-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/kylin-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/neokylin-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/neokylin-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/neokylin-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
@@ -200,57 +200,57 @@ get_os_version() {
     fi
 
     if [ -f /etc/deepin-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/deepin-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/deepin-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/openEuler-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/openEuler-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/openEuler-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/euleros-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/euleros-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/euleros-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/anolis-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/anolis-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/anolis-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/tencentos-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/tencentos-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/tencentos-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/iSoft-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/iSoft-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/iSoft-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/redflag-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/redflag-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/redflag-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/linx-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/linx-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/linx-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/newstart-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/newstart-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/newstart-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/nfs-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/nfs-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/nfs-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/founder-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/founder-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/founder-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
@@ -267,7 +267,7 @@ get_os_version() {
     fi
 
     if [ -f /etc/redhat-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)+' /etc/redhat-release | head -1)
+        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/redhat-release | head -1)
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
@@ -286,10 +286,19 @@ get_cpu_model() {
     if [ -f /proc/cpuinfo ]; then
         cpu_model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | sed 's/model name\s*:\s*//')
         if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "Model" /proc/cpuinfo 2>/dev/null | sed 's/Model\s*:\s*//')
+            cpu_model=$(grep -m1 "^Model\s*:" /proc/cpuinfo 2>/dev/null | sed 's/Model\s*:\s*//')
+        fi
+        if [ -z "$cpu_model" ]; then
+            cpu_model=$(grep -m1 "Hardware" /proc/cpuinfo 2>/dev/null | sed 's/Hardware\s*:\s*//')
         fi
         if [ -z "$cpu_model" ]; then
             cpu_model=$(grep -m1 "cpu model" /proc/cpuinfo 2>/dev/null | sed 's/cpu model\s*:\s*//')
+        fi
+        if [ -z "$cpu_model" ]; then
+            cpu_model=$(grep -m1 "^cpu\s*:" /proc/cpuinfo 2>/dev/null | sed 's/^cpu\s*:\s*//')
+        fi
+        if [ -z "$cpu_model" ]; then
+            cpu_model=$(grep -m1 "cpu part" /proc/cpuinfo 2>/dev/null | sed 's/cpu part\s*:\s*//')
         fi
     fi
 
@@ -350,7 +359,7 @@ db_check_cmd() {
     if command -v "$cmd" >/dev/null 2>&1; then
         local ver=""
         if [ -n "$ver_cmd" ]; then
-            ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
         fi
         db_add "$db_name" "$ver"
     fi
@@ -378,7 +387,7 @@ db_check_service() {
         if systemctl list-units --type=service --all 2>/dev/null | grep -qi "$svc_pattern"; then
             local ver=""
             if [ -n "$ver_cmd" ]; then
-                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
             fi
             db_add "$db_name" "$ver"
             return
@@ -389,7 +398,7 @@ db_check_service() {
         if service --status-all 2>/dev/null | grep -qi "$svc_pattern"; then
             local ver=""
             if [ -n "$ver_cmd" ]; then
-                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
             fi
             db_add "$db_name" "$ver"
             return
@@ -400,7 +409,7 @@ db_check_service() {
         if [ -f "$f" ]; then
             local ver=""
             if [ -n "$ver_cmd" ]; then
-                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
             fi
             db_add "$db_name" "$ver"
             return
@@ -451,7 +460,7 @@ detect_databases() {
     db_check_dir "达梦" "/opt/dmdbms /dmdbms /opt/dameng"
     for d in /opt/dmdbms/bin /dmdbms/bin; do
         if [ -d "$d" ] && [ -f "$d/dmserver" ]; then
-            local ver=$("$d/dmserver" -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            local ver=$("$d/dmserver" -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
             if [ -n "$ver" ] && ! echo "$_DB_FOUND" | grep -qx "达梦"; then
                 db_add "达梦" "$ver"
             fi
@@ -467,7 +476,7 @@ detect_databases() {
     db_check_dir "金仓" "/opt/Kingbase /opt/kingbase /usr/local/kingbase"
     for d in /opt/Kingbase/ES/V8/Install/bin /opt/kingbase/bin; do
         if [ -d "$d" ] && [ -f "$d/kingbase" ]; then
-            local ver=$("$d/kingbase" -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            local ver=$("$d/kingbase" -V 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
             if [ -n "$ver" ] && ! echo "$_DB_FOUND" | grep -qx "金仓"; then
                 db_add "金仓" "$ver"
             fi
@@ -516,7 +525,7 @@ detect_databases() {
         psql_out=$(psql --version 2>/dev/null | head -1)
         if echo "$psql_out" | grep -qi "polardb"; then
             local ver
-            ver=$(echo "$psql_out" | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+            ver=$(echo "$psql_out" | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
             db_add "阿里PolarDB" "$ver"
         fi
     fi
