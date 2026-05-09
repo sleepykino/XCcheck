@@ -451,6 +451,50 @@ db_check_port() {
     fi
 }
 
+db_check_docker() {
+    local db_name="$1"
+    local image_keywords="$2"
+
+    if ! command -v docker >/dev/null 2>&1; then
+        return
+    fi
+
+    if ! docker info >/dev/null 2>&1; then
+        return
+    fi
+
+    if echo "$_DB_FOUND" | grep -qx "$db_name"; then
+        return
+    fi
+
+    local docker_out
+    docker_out=$(docker ps --format '{{.Image}} {{.Names}}' 2>/dev/null)
+    if [ -z "$docker_out" ]; then
+        return
+    fi
+
+    for kw in $image_keywords; do
+        if echo "$docker_out" | grep -qi "$kw"; then
+            local ver=""
+            local container_id
+            container_id=$(docker ps --filter "ancestor=$kw" --format '{{.ID}}' 2>/dev/null | head -1)
+            if [ -z "$container_id" ]; then
+                container_id=$(docker ps --format '{{.ID}} {{.Image}} {{.Names}}' 2>/dev/null | grep -i "$kw" | head -1 | awk '{print $1}')
+            fi
+            if [ -n "$container_id" ]; then
+                local img
+                img=$(docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null)
+                ver=$(echo "$img" | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+                if [ -z "$ver" ]; then
+                    ver=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container_id" 2>/dev/null | grep -iE 'VERSION|VER' | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+                fi
+            fi
+            db_add "$db_name" "$ver"
+            return
+        fi
+    done
+}
+
 detect_databases() {
     _DB_RESULTS=""
     _DB_FOUND=""
@@ -469,6 +513,7 @@ detect_databases() {
     done
     db_check_service "达梦" "dmserver" ""
     db_check_process "达梦" "dmserver"
+    db_check_docker "达梦" "dmdb\|dameng\|dm8"
 
     db_check_cmd "金仓" "kingbase" "kingbase -V"
     db_check_cmd "金仓" "ksql" "ksql -V"
@@ -485,41 +530,48 @@ detect_databases() {
     done
     db_check_service "金仓" "kingbase" ""
     db_check_process "金仓" "kingbase"
+    db_check_docker "金仓" "kingbase\|kingbasev8r6\|kingbase8"
 
     db_check_cmd "神舟通用" "osdb" "osdb -V"
     db_check_cmd "神舟通用" "osci" ""
     db_check_dir "神舟通用" "/opt/ShenTong /opt/shentong /usr/local/shentong"
     db_check_service "神舟通用" "shentong" ""
     db_check_process "神舟通用" "oscar\|osdb"
+    db_check_docker "神舟通用" "shentong\|oscar"
 
     db_check_cmd "瀚高" "hgdb" "hgdb -V"
     db_check_cmd "瀚高" "hgdb-admin" ""
     db_check_dir "瀚高" "/opt/highgo /usr/local/highgo"
     db_check_service "瀚高" "highgo" ""
     db_check_process "瀚高" "hgdb\|highgo"
+    db_check_docker "瀚高" "highgo\|hgdb"
 
     db_check_cmd "南大通用" "gbase" "gbase -V"
     db_check_cmd "南大通用" "gbasedbt" "gbasedbt -V"
     db_check_dir "南大通用" "/opt/gbase /usr/local/gbase"
     db_check_service "南大通用" "gbase" ""
     db_check_process "南大通用" "gbase\|gbasedbt"
+    db_check_docker "南大通用" "gbase\|gbasedbt"
 
     db_check_cmd "优炫" "uxsql" "uxsql -V"
     db_check_cmd "优炫" "uxdb" "uxdb -V"
     db_check_dir "优炫" "/opt/uxdb /usr/local/uxdb"
     db_check_service "优炫" "uxdb" ""
     db_check_process "优炫" "uxdb"
+    db_check_docker "优炫" "uxdb"
 
     db_check_cmd "海量" "vastbase" "vastbase -V"
     db_check_cmd "海量" "vds_cli" ""
     db_check_dir "海量" "/opt/vastbase /opt/hailiang"
     db_check_service "海量" "vastbase" ""
     db_check_process "海量" "vastbase\|vds"
+    db_check_docker "海量" "vastbase"
 
     db_check_cmd "阿里PolarDB" "polardb" "polardb -V"
     db_check_dir "阿里PolarDB" "/opt/polardb /usr/local/polardb"
     db_check_service "阿里PolarDB" "polardb" ""
     db_check_process "阿里PolarDB" "polardb"
+    db_check_docker "阿里PolarDB" "polardb\|polardbx"
     if command -v psql >/dev/null 2>&1; then
         local psql_out
         psql_out=$(psql --version 2>/dev/null | head -1)
@@ -534,57 +586,67 @@ detect_databases() {
     db_check_dir "腾讯TDSQL" "/opt/tdsql /usr/local/tdsql"
     db_check_service "腾讯TDSQL" "tdsql" ""
     db_check_process "腾讯TDSQL" "tdsql"
+    db_check_docker "腾讯TDSQL" "tdsql\|tencentcloud\|tdsqlhack"
 
     db_check_cmd "虚谷" "xugusql" "xugusql -V"
     db_check_cmd "虚谷" "xugu" ""
     db_check_dir "虚谷" "/opt/xugu /usr/local/xugu"
     db_check_service "虚谷" "xugu" ""
     db_check_process "虚谷" "xugu"
+    db_check_docker "虚谷" "xugu"
 
     db_check_cmd "东方金信" "xdb" "xdb -V"
     db_check_cmd "东方金信" "jxdb" ""
     db_check_dir "东方金信" "/opt/jxserver /opt/dongfang"
     db_check_service "东方金信" "jxserver" ""
     db_check_process "东方金信" "jxdb"
+    db_check_docker "东方金信" "jxserver\|dongfang"
 
     db_check_cmd "万里开源" "greatsql" "greatsql -V"
     db_check_cmd "万里开源" "greatdb" "greatdb -V"
     db_check_dir "万里开源" "/opt/greatdb /opt/greatsql"
     db_check_service "万里开源" "greatdb" ""
     db_check_process "万里开源" "greatsql\|greatdb"
+    db_check_docker "万里开源" "greatsql\|greatdb"
 
     db_check_cmd "华为GaussDB" "gaussdb" "gaussdb -V"
     db_check_cmd "华为GaussDB" "gs_ctl" "gs_ctl -V"
     db_check_dir "华为GaussDB" "/opt/gaussdb /opt/huawei/gaussdb /var/lib/gaussdb"
     db_check_service "华为GaussDB" "gaussdb" "gaussdb -V"
     db_check_process "华为GaussDB" "gaussdb\|gs_ctl"
+    db_check_docker "华为GaussDB" "gaussdb\|opengauss\|gaussdb-k8s"
 
     db_check_cmd "平凯" "tidb" "tidb -V"
     db_check_cmd "平凯" "pingcap" ""
     db_check_dir "平凯" "/opt/tidb /opt/pingcap"
     db_check_service "平凯" "tidb" "tidb -V"
     db_check_process "平凯" "tidb"
+    db_check_docker "平凯" "tidb\|pingcap\|tikv\|pd"
 
     db_check_cmd "中兴GoldenDB" "goldendb" "goldendb -V"
     db_check_dir "中兴GoldenDB" "/opt/goldendb /opt/zte/goldendb"
     db_check_service "中兴GoldenDB" "goldendb" ""
     db_check_process "中兴GoldenDB" "goldendb"
+    db_check_docker "中兴GoldenDB" "goldendb\|zte"
 
     db_check_cmd "奥星贝斯" "observer" "observer -V"
     db_check_dir "奥星贝斯" "/opt/oceanbase /usr/local/oceanbase"
     db_check_service "奥星贝斯" "oceanbase\|observer" ""
     db_check_process "奥星贝斯" "observer\|oceanbase"
     db_check_port "奥星贝斯" "2881"
+    db_check_docker "奥星贝斯" "oceanbase\|observer"
 
     db_check_dir "TaurusDB" "/opt/taurusdb /opt/huawei/taurusdb"
     db_check_service "TaurusDB" "taurusdb" ""
     db_check_process "TaurusDB" "taurusdb"
+    db_check_docker "TaurusDB" "taurusdb\|taurus"
 
     db_check_cmd "MySQL" "mysql" "mysql --version"
     db_check_cmd "MySQL" "mysqld" "mysqld --version"
     db_check_service "MySQL" "mysql\|mysqld\|mariadb" ""
     db_check_process "MySQL" "mysqld\|mariadbd"
     db_check_port "MySQL" "3306"
+    db_check_docker "MySQL" "mysql\|mariadb\|percona"
     if [ -d /var/lib/mysql ] || [ -d /var/lib/mysql/data ]; then
         db_add "MySQL" ""
     fi
@@ -594,6 +656,7 @@ detect_databases() {
     db_check_service "PostgreSQL" "postgresql\|postgres" ""
     db_check_process "PostgreSQL" "postgres"
     db_check_port "PostgreSQL" "5432"
+    db_check_docker "PostgreSQL" "postgres\|postgresql"
     if [ -d /var/lib/pgsql ] || [ -d /var/lib/postgresql ]; then
         db_add "PostgreSQL" ""
     fi
@@ -603,24 +666,28 @@ detect_databases() {
     db_check_service "MariaDB" "mariadb" ""
     db_check_process "MariaDB" "mariadbd"
     db_check_port "MariaDB" "3307"
+    db_check_docker "MariaDB" "mariadb"
 
     db_check_cmd "Oracle" "sqlplus" "sqlplus -V"
     db_check_dir "Oracle" "/opt/oracle /u01/app/oracle /u01/app/oracle/product"
     db_check_service "Oracle" "oracle\|oradb" ""
     db_check_process "Oracle" "ora_pmon\|oracle"
     db_check_port "Oracle" "1521"
+    db_check_docker "Oracle" "oracle\|oraclelinux\|oradb"
 
     db_check_cmd "Redis" "redis-server" "redis-server --version"
     db_check_cmd "Redis" "redis-cli" "redis-cli --version"
     db_check_service "Redis" "redis" ""
     db_check_process "Redis" "redis-server"
     db_check_port "Redis" "6379"
+    db_check_docker "Redis" "redis"
 
     db_check_cmd "MongoDB" "mongod" "mongod --version"
     db_check_cmd "MongoDB" "mongo" "mongo --version"
     db_check_service "MongoDB" "mongod\|mongodb" ""
     db_check_process "MongoDB" "mongod"
     db_check_port "MongoDB" "27017"
+    db_check_docker "MongoDB" "mongo\|mongodb"
 
     _DB_RESULTS=$(echo "$_DB_RESULTS" | sed '/^$/d' | sort -u)
 
