@@ -81,14 +81,28 @@ get_os_name() {
 
     if [ -f /etc/uos-release ]; then
         os_name=$(grep "^NAME=" /etc/uos-release 2>/dev/null | head -1 | sed 's/NAME=//' | tr -d '"' | awk '{print $1" "$2}')
+        if [ -z "$os_name" ]; then
+            os_name=$(head -1 /etc/uos-release | awk '{print $1" "$2}')
+        fi
+        if [ -z "$os_name" ]; then
+            os_name="统信UOS"
+        fi
         [ -n "$os_name" ] && echo "$os_name" && return
     fi
 
     if [ -f /etc/deepin-release ] || [ -f /etc/deepin-version ]; then
-        local df="/etc/deepin-release"
-        [ -f /etc/deepin-version ] && df="/etc/deepin-version"
-        os_name=$(head -1 "$df" | awk '{print $1" "$2" "$3}')
-        [ -n "$os_name" ] && echo "$os_name" && return
+        local is_uos=0
+        if [ -f /etc/uos-release ]; then
+            is_uos=1
+        elif [ -f /etc/os-release ] && grep -qi "uos\|Uniontech" /etc/os-release 2>/dev/null; then
+            is_uos=1
+        fi
+        if [ "$is_uos" = "0" ]; then
+            local df="/etc/deepin-release"
+            [ -f /etc/deepin-version ] && df="/etc/deepin-version"
+            os_name=$(head -1 "$df" | awk '{print $1" "$2" "$3}')
+            [ -n "$os_name" ] && echo "$os_name" && return
+        fi
     fi
 
     if [ -f /etc/openEuler-release ]; then
@@ -191,17 +205,35 @@ get_os_version() {
 
     if [ -f /etc/uos-release ]; then
         os_version=$(grep "^VERSION=" /etc/uos-release 2>/dev/null | head -1 | sed 's/VERSION=//' | tr -d '"')
+        if [ -z "$os_version" ]; then
+            os_version=$(grep "^VERSION_ID=" /etc/uos-release 2>/dev/null | head -1 | sed 's/VERSION_ID=//' | tr -d '"')
+        fi
+        if [ -z "$os_version" ]; then
+            os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/uos-release | head -1)
+        fi
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/deepin-version ]; then
-        os_version=$(grep -i "version" /etc/deepin-version 2>/dev/null | head -1 | sed 's/.*[=:]\s*//' | tr -d '"' | awk '{print $1}')
-        [ -n "$os_version" ] && echo "$os_version" && return
+        if [ -f /etc/uos-release ]; then
+            :
+        elif [ -f /etc/os-release ] && grep -qi "uos\|Uniontech" /etc/os-release 2>/dev/null; then
+            :
+        else
+            os_version=$(grep -i "version" /etc/deepin-version 2>/dev/null | head -1 | sed 's/.*[=:]\s*//' | tr -d '"' | awk '{print $1}')
+            [ -n "$os_version" ] && echo "$os_version" && return
+        fi
     fi
 
     if [ -f /etc/deepin-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/deepin-release | head -1)
-        [ -n "$os_version" ] && echo "$os_version" && return
+        if [ -f /etc/uos-release ]; then
+            :
+        elif [ -f /etc/os-release ] && grep -qi "uos\|Uniontech" /etc/os-release 2>/dev/null; then
+            :
+        else
+            os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/deepin-release | head -1)
+            [ -n "$os_version" ] && echo "$os_version" && return
+        fi
     fi
 
     if [ -f /etc/openEuler-release ]; then
@@ -398,15 +430,11 @@ check_dual_boot() {
                 result="是"
                 found_os="Windows"
             elif echo "$efi_boot" | grep -qi "BootOrder"; then
-                local boot_count
-                boot_count=$(echo "$efi_boot" | grep -c "^Boot[0-9]")
-                if [ "$boot_count" -gt 1 ]; then
-                    local other_boot
-                    other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|linux\|deepin\|uos\|openeuler\|euler\|centos\|ubuntu\|fedora\|shell" | head -1)
-                    if [ -n "$other_boot" ]; then
-                        result="是"
-                        found_os=$(echo "$other_boot" | sed 's/^Boot[0-9]\+\**\s*//')
-                    fi
+                local other_boot
+                other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|linux\|deepin\|uos\|openeuler\|euler\|centos\|ubuntu\|fedora\|shell\|bootmanagermenu\|byouiapp\|boot menu\|fdi\|diagnostic\|bios\|setup\|ip4\|ip6\|pxe\|network\|usb\|cdrom\|card\|nvme\|sata\|ahci\|raid\|ieee" | head -1)
+                if [ -n "$other_boot" ]; then
+                    result="是"
+                    found_os=$(echo "$other_boot" | sed 's/^Boot[0-9]\+\**\s*//')
                 fi
             fi
         fi
