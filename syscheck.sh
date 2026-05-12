@@ -67,10 +67,15 @@ get_os_name() {
 
     if command -v nkvers >/dev/null 2>&1; then
         local nkout
-        nkout=$(nkvers 2>/dev/null)
+        nkout=$(nkvers 2>/dev/null | sed 's/#//g')
         if echo "$nkout" | grep -qi "kylin\|麒麟"; then
-            os_name=$(echo "$nkout" | grep -i "Release" | head -1 | sed 's/.*:\s*//' | tr -d '"' | awk '{print $1}')
-            [ -z "$os_name" ] && os_name=$(echo "$nkout" | head -1 | awk '{print $1" "$2" "$3}')
+            os_name=$(echo "$nkout" | grep -i "^Kylin Linux" | grep -vi "Version" | head -1 | awk '{print $1" "$2" "$3}')
+            if [ -z "$os_name" ]; then
+                os_name=$(echo "$nkout" | grep -i "release" | grep -vi "^$" | grep -vi "Version\|Kernel\|Build" | head -1 | awk '{print $1" "$2" "$3}')
+            fi
+            if [ -z "$os_name" ]; then
+                os_name=$(echo "$nkout" | grep -i "Kylin" | grep -vi "Version\|Kernel\|Build" | head -1 | awk '{print $1" "$2" "$3}')
+            fi
             [ -n "$os_name" ] && echo "$os_name" && return
         fi
     fi
@@ -192,25 +197,31 @@ get_os_version() {
 
     if command -v nkvers >/dev/null 2>&1; then
         local nkout
-        nkout=$(nkvers 2>/dev/null)
+        nkout=$(nkvers 2>/dev/null | sed 's/#//g')
         if echo "$nkout" | grep -qi "kylin\|麒麟"; then
-            os_version=$(echo "$nkout" | grep -i "Version" | head -1 | sed 's/.*:\s*//' | tr -d '"' | awk '{print $1}')
+            os_version=$(echo "$nkout" | grep -i "release" | grep -vi "^$" | grep -vi "Version\|Kernel\|Build" | head -1 | sed 's/.*release\s*//' | awk '{print $0}')
+            if [ -z "$os_version" ]; then
+                os_version=$(echo "$nkout" | grep -oE 'V[0-9]+(\.[0-9]+)*' | head -1)
+            fi
+            if [ -z "$os_version" ]; then
+                os_version=$(echo "$nkout" | grep -i "Kernel" | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+            fi
             [ -n "$os_version" ] && echo "$os_version" && return
         fi
     fi
 
     if [ -f /etc/kylin-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/kylin-release | head -1)
+        os_version=$(head -1 /etc/kylin-release | sed 's/#//g' | sed 's/.*release\s*//' | awk '{print $0}')
         if [ -z "$os_version" ]; then
-            os_version=$(head -1 /etc/kylin-release | sed 's/#//g' | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+            os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/kylin-release | head -1)
         fi
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/neokylin-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/neokylin-release | head -1)
+        os_version=$(head -1 /etc/neokylin-release | sed 's/#//g' | sed 's/.*release\s*//' | awk '{print $0}')
         if [ -z "$os_version" ]; then
-            os_version=$(head -1 /etc/neokylin-release | sed 's/#//g' | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+            os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/neokylin-release | head -1)
         fi
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
@@ -432,7 +443,7 @@ check_dual_boot() {
                         found_os="Windows"
                         break
                         ;;
-                    BOOT|boot|kylin|Kylin|uos|UOS|deepin|Deepin|openEuler|hce|HCE|centos|ubuntu|fedora)
+                    BOOT|boot|kylin|Kylin|uos|UOS|deepin|Deepin|openEuler|hce|HCE|centos|ubuntu|fedora|HISI|hisi|tools|diags|diag|resource|RESERVE|reserve|shell|SHELL|tool|tools|fw|FW)
                         ;;
                     *)
                         if [ "$result" = "否" ]; then
@@ -454,7 +465,7 @@ check_dual_boot() {
                 found_os="Windows"
             elif echo "$efi_boot" | grep -qi "BootOrder"; then
                 local other_boot
-                other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|linux\|deepin\|uos\|openeuler\|euler\|hce\|centos\|ubuntu\|fedora\|shell\|bootmanagermenu\|byouiapp\|boot menu\|fdi\|diagnostic\|bios\|setup\|ip4\|ip6\|pxe\|network\|usb\|cdrom\|card\|nvme\|sata\|ahci\|raid\|ieee" | head -1)
+                other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|linux\|deepin\|uos\|openeuler\|euler\|hce\|centos\|ubuntu\|fedora\|shell\|bootmanagermenu\|byouiapp\|boot manager\|consolidated boot\|fdi\|diagnostic\|bios\|setup\|systemreset\|recovery\|backup\|ip4\|ip6\|pxe\|network\|usb\|cdrom\|card\|nvme\|sata\|ahci\|raid\|ieee" | head -1)
                 if [ -n "$other_boot" ]; then
                     result="是"
                     found_os=$(echo "$other_boot" | sed 's/^Boot[0-9]\+\**\s*//')
