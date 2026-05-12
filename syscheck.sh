@@ -70,12 +70,12 @@ get_os_name() {
     fi
 
     if [ -f /etc/kylin-release ]; then
-        os_name=$(head -1 /etc/kylin-release | awk '{print $1" "$2" "$3}')
+        os_name=$(head -1 /etc/kylin-release | sed 's/#//g' | awk '{print $1" "$2" "$3}')
         [ -n "$os_name" ] && echo "$os_name" && return
     fi
 
     if [ -f /etc/neokylin-release ]; then
-        os_name=$(head -1 /etc/neokylin-release | awk '{print $1" "$2" "$3}')
+        os_name=$(head -1 /etc/neokylin-release | sed 's/#//g' | awk '{print $1" "$2" "$3}')
         [ -n "$os_name" ] && echo "$os_name" && return
     fi
 
@@ -195,11 +195,17 @@ get_os_version() {
 
     if [ -f /etc/kylin-release ]; then
         os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/kylin-release | head -1)
+        if [ -z "$os_version" ]; then
+            os_version=$(head -1 /etc/kylin-release | sed 's/#//g' | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+        fi
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/neokylin-release ]; then
         os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/neokylin-release | head -1)
+        if [ -z "$os_version" ]; then
+            os_version=$(head -1 /etc/neokylin-release | sed 's/#//g' | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+        fi
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
@@ -315,29 +321,40 @@ get_os_version() {
 get_cpu_model() {
     local cpu_model=""
 
-    if [ -f /proc/cpuinfo ]; then
-        cpu_model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | sed 's/model name\s*:\s*//')
+    if command -v lscpu >/dev/null 2>&1; then
+        cpu_model=$(lscpu 2>/dev/null | grep -m1 "Model name" | sed 's/Model name:\s*//')
         if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "^Model\s*:" /proc/cpuinfo 2>/dev/null | sed 's/Model\s*:\s*//')
-        fi
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "Hardware" /proc/cpuinfo 2>/dev/null | sed 's/Hardware\s*:\s*//')
-        fi
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "cpu model" /proc/cpuinfo 2>/dev/null | sed 's/cpu model\s*:\s*//')
-        fi
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "^cpu\s*:" /proc/cpuinfo 2>/dev/null | sed 's/^cpu\s*:\s*//')
-        fi
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "cpu part" /proc/cpuinfo 2>/dev/null | sed 's/cpu part\s*:\s*//')
+            cpu_model=$(lscpu 2>/dev/null | grep -m1 "Hypervisor vendor" | sed 's/Hypervisor vendor:\s*//')
         fi
     fi
 
-    if [ -z "$cpu_model" ] && command -v lscpu >/dev/null 2>&1; then
-        cpu_model=$(lscpu 2>/dev/null | grep -m1 "Model name" | sed 's/Model name:\s*//')
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(lscpu 2>/dev/null | grep -m1 "Architecture" | awk '{print $2}')
+    if [ -f /proc/cpuinfo ]; then
+        local proc_cpu
+        proc_cpu=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | sed 's/model name\s*:\s*//')
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "^Model\s*:" /proc/cpuinfo 2>/dev/null | sed 's/Model\s*:\s*//')
+        fi
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "Hardware" /proc/cpuinfo 2>/dev/null | sed 's/Hardware\s*:\s*//')
+        fi
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "cpu model" /proc/cpuinfo 2>/dev/null | sed 's/cpu model\s*:\s*//')
+        fi
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "^cpu\s*:" /proc/cpuinfo 2>/dev/null | sed 's/^cpu\s*:\s*//')
+        fi
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "cpu part" /proc/cpuinfo 2>/dev/null | sed 's/cpu part\s*:\s*//')
+        fi
+        if echo "$cpu_model" | grep -qi "bios\|virt\|qemu\|bochs"; then
+            cpu_model=""
+        fi
+        if [ -z "$cpu_model" ] && [ -n "$proc_cpu" ]; then
+            if echo "$proc_cpu" | grep -qi "bios\|virt\|qemu\|bochs"; then
+                :
+            else
+                cpu_model="$proc_cpu"
+            fi
         fi
     fi
 
@@ -409,7 +426,7 @@ check_dual_boot() {
                         found_os="Windows"
                         break
                         ;;
-                    BOOT|boot|kylin|Kylin|uos|UOS|deepin|Deepin|openEuler|centos|ubuntu|fedora)
+                    BOOT|boot|kylin|Kylin|uos|UOS|deepin|Deepin|openEuler|hce|HCE|centos|ubuntu|fedora)
                         ;;
                     *)
                         if [ "$result" = "否" ]; then
@@ -431,7 +448,7 @@ check_dual_boot() {
                 found_os="Windows"
             elif echo "$efi_boot" | grep -qi "BootOrder"; then
                 local other_boot
-                other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|linux\|deepin\|uos\|openeuler\|euler\|centos\|ubuntu\|fedora\|shell\|bootmanagermenu\|byouiapp\|boot menu\|fdi\|diagnostic\|bios\|setup\|ip4\|ip6\|pxe\|network\|usb\|cdrom\|card\|nvme\|sata\|ahci\|raid\|ieee" | head -1)
+                other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|linux\|deepin\|uos\|openeuler\|euler\|hce\|centos\|ubuntu\|fedora\|shell\|bootmanagermenu\|byouiapp\|boot menu\|fdi\|diagnostic\|bios\|setup\|ip4\|ip6\|pxe\|network\|usb\|cdrom\|card\|nvme\|sata\|ahci\|raid\|ieee" | head -1)
                 if [ -n "$other_boot" ]; then
                     result="是"
                     found_os=$(echo "$other_boot" | sed 's/^Boot[0-9]\+\**\s*//')
