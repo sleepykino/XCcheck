@@ -6,6 +6,12 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 DATE_STR=$(date '+%Y%m%d')
 HOSTNAME_VAL=$(hostname 2>/dev/null || echo "Unknown")
 
+if [ "$(id -u)" = "0" ]; then
+    IS_ROOT=1
+else
+    IS_ROOT=0
+fi
+
 get_first_ip() {
     local ip=""
 
@@ -440,7 +446,7 @@ check_dual_boot() {
     fi
 
     if [ "$result" = "否" ]; then
-        if command -v efibootmgr >/dev/null 2>&1; then
+        if [ "$IS_ROOT" = "1" ] && command -v efibootmgr >/dev/null 2>&1; then
             local efi_boot
             efi_boot=$(efibootmgr 2>/dev/null)
             if echo "$efi_boot" | grep -qi "windows\|microsoft"; then
@@ -457,7 +463,7 @@ check_dual_boot() {
         fi
     fi
 
-    if [ "$result" = "否" ] && [ -f /etc/grub.d/30_os-prober ]; then
+    if [ "$result" = "否" ] && [ "$IS_ROOT" = "1" ] && [ -f /etc/grub.d/30_os-prober ]; then
         if [ -x /usr/bin/os-prober ] || [ -x /sbin/os-prober ]; then
             local prober_out
             prober_out=$(os-prober 2>/dev/null)
@@ -499,7 +505,7 @@ get_machine_vendor() {
         vendor=$(cat /sys/devices/virtual/dmi/id/chassis_vendor 2>/dev/null | head -1)
     fi
 
-    if [ -z "$vendor" ] && command -v dmidecode >/dev/null 2>&1; then
+    if [ -z "$vendor" ] && [ "$IS_ROOT" = "1" ] && command -v dmidecode >/dev/null 2>&1; then
         vendor=$(dmidecode -s system-manufacturer 2>/dev/null | head -1)
     fi
 
@@ -620,13 +626,24 @@ db_check_service() {
     local ver_cmd="$3"
 
     if command -v systemctl >/dev/null 2>&1; then
-        if systemctl list-units --type=service --all 2>/dev/null | grep -qi "$svc_pattern"; then
-            local ver=""
-            if [ -n "$ver_cmd" ]; then
-                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+        if [ "$IS_ROOT" = "1" ]; then
+            if systemctl list-units --type=service --all 2>/dev/null | grep -qi "$svc_pattern"; then
+                local ver=""
+                if [ -n "$ver_cmd" ]; then
+                    ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+                fi
+                db_add "$db_name" "$ver"
+                return
             fi
-            db_add "$db_name" "$ver"
-            return
+        else
+            if systemctl list-unit-files --type=service 2>/dev/null | grep -qi "$svc_pattern"; then
+                local ver=""
+                if [ -n "$ver_cmd" ]; then
+                    ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+                fi
+                db_add "$db_name" "$ver"
+                return
+            fi
         fi
     fi
 
@@ -680,7 +697,7 @@ db_check_port() {
             fi
         fi
         if command -v netstat >/dev/null 2>&1; then
-            if netstat -tlnp 2>/dev/null | grep -q ":${port} "; then
+            if netstat -tln 2>/dev/null | grep -q ":${port} "; then
                 db_add "$db_name" ""
             fi
         fi
@@ -692,14 +709,6 @@ db_check_docker() {
     local image_keywords="$2"
 
     if ! command -v docker >/dev/null 2>&1; then
-        return
-    fi
-
-    if ! docker info >/dev/null 2>&1; then
-        return
-    fi
-
-    if echo "$_DB_FOUND" | grep -qx "$db_name"; then
         return
     fi
 
@@ -958,6 +967,10 @@ KERNEL_VERSION=$(get_kernel_version)
 DUAL_BOOT=$(check_dual_boot)
 MACHINE_VENDOR=$(get_machine_vendor)
 DB_RESULT=$(detect_databases)
+
+if [ "$IS_ROOT" = "0" ]; then
+    echo "[!] 当前非root权限运行，部分检测项可能不完整（如efibootmgr、dmidecode、os-prober）"
+fi
 
 echo "[*] 系统名称:    ${OS_NAME}"
 echo "[*] 系统版本:    ${OS_VERSION}"
