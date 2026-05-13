@@ -199,7 +199,7 @@ get_os_version() {
         local nkout
         nkout=$(nkvers 2>/dev/null | sed 's/#//g')
         if echo "$nkout" | grep -qi "kylin\|麒麟"; then
-            os_version=$(echo "$nkout" | grep -i "release" | grep -vi "^$" | grep -vi "Version\|Kernel\|Build" | head -1 | sed 's/.*release\s*//' | awk '{print $0}')
+            os_version=$(echo "$nkout" | grep -i "^Kylin Linux" | grep -vi "Version" | head -1 | sed 's/.*[Rr]elease\s*//')
             if [ -z "$os_version" ]; then
                 os_version=$(echo "$nkout" | grep -oE 'V[0-9]+(\.[0-9]+)*' | head -1)
             fi
