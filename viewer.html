@@ -496,7 +496,7 @@ body {
                         数据库类型
                     </div>
                     <textarea class="rule-textarea" id="rule_dbName" placeholder="每行一个合规的数据库名称，例如：&#10;达梦&#10;金仓&#10;华为GaussDB"></textarea>
-                    <div class="rule-hint">对检测到的数据库类型进行合规匹配（任一数据库匹配即合规），非信创数据库（MySQL、Oracle等）也会被检测</div>
+                    <div class="rule-hint">检测到的数据库必须全部在列表中才算合规，任一数据库不在列表即为不合规</div>
                 </div>
                 <div class="rule-group">
                     <div class="rule-label">
@@ -684,15 +684,20 @@ function matchRule(value, ruleList) {
 
 function matchDbRule(databases, ruleList) {
     if (!ruleList || ruleList.length === 0) return 'na';
-    if (!databases || databases.length === 0) return 'fail';
+    if (!databases || databases.length === 0) return 'na';
     for (const db of databases) {
+        let found = false;
         for (const rule of ruleList) {
             const r = rule.toLowerCase().trim();
             const n = db.name.toLowerCase().trim();
-            if (n === r || n.includes(r) || r.includes(n)) return 'pass';
+            if (n === r || n.includes(r) || r.includes(n)) {
+                found = true;
+                break;
+            }
         }
+        if (!found) return 'fail';
     }
-    return 'fail';
+    return 'pass';
 }
 
 function matchDualBootRule(flag, ruleList) {
