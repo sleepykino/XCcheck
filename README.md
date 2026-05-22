@@ -5,7 +5,7 @@
 XCcheck 是一套面向信创（信息技术应用创新）环境的系统信息采集与合规检查工具，包含：
 
 - **syscheck.sh** — Linux 采集脚本，自动获取操作系统、CPU、数据库、双系统、机器品牌等信息并输出 XML
-- **viewer.html** — 网页端解析工具，支持批量导入 XML、卡片化展示、合规检查、CSV 导出
+- **viewer.html** — 网页端解析工具，支持批量导入 XML、卡片化展示、合规检查、规则导入、CSV 导出
 
 ---
 
@@ -39,7 +39,7 @@ chmod +x syscheck.sh
   <IP>192.168.1.100</IP>
   <CollectTime>2026-05-07 10:30:00</CollectTime>
   <OS>
-    <Name>银河麒麟高级服务器操作系统</Name>
+    <Name>Kylin Linux Advanced</Name>
     <Version>V10 (Lance)</Version>
     <Kernel>4.19.90-24.4.v2101.ky10.x86_64</Kernel>
   </OS>
@@ -103,6 +103,53 @@ chmod +x syscheck.sh
 | 中科方德 | `/etc/founder-release` |
 
 通用回退链：`/etc/os-release` → `lsb_release` → `/etc/redhat-release` → `/etc/lsb-release` → `uname`
+
+---
+
+## 支持的 CPU / 芯片
+
+脚本通过 `lscpu` 优先检测，回退到 `/proc/cpuinfo` 解析，并自动过滤虚拟化标识（bios、virt、qemu、bochs）。
+
+### 支持的信创 CPU 架构
+
+| 架构 | 说明 | 对应芯片 |
+|------|------|---------|
+| x86_64 | x86 64位架构 | 海光、兆芯 |
+| aarch64 | ARM 64位架构 | 鲲鹏、飞腾 |
+| loongarch64 | 龙芯自主架构 | 龙芯3号系列 |
+| sw_64 | 申威64位架构 | 申威处理器 |
+
+### 支持的信创 CPU 型号
+
+| CPU | 厂商 | 架构 | 检测标识 |
+|-----|------|------|---------|
+| 鲲鹏 920 | 华为 | aarch64 | Kunpeng 920、Kunpeng |
+| 鲲鹏 916 | 华为 | aarch64 | Kunpeng 916 |
+| 飞腾 FT-2000/+ | 飞腾 | aarch64 | FT-2000、Phytium |
+| 飞腾 D2000 | 飞腾 | aarch64 | D2000、Phytium |
+| 飞腾 S2500 | 飞腾 | aarch64 | S2500、Phytium |
+| 龙芯 3A5000 | 龙芯 | loongarch64 | Loongson-3A5000、3A5000 |
+| 龙芯 3C5000 | 龙芯 | loongarch64 | Loongson-3C5000、3C5000 |
+| 龙芯 3A6000 | 龙芯 | loongarch64 | Loongson-3A6000、3A6000 |
+| 海光 3000 系列 | 海光 | x86_64 | Hygon、海光 |
+| 海光 5000 系列 | 海光 | x86_64 | Hygon、海光 |
+| 海光 7000 系列 | 海光 | x86_64 | Hygon、海光 |
+| 兆芯 KX-6000 | 兆芯 | x86_64 | Zhaoxin、兆芯、KX-6000 |
+| 兆芯 KH-30000 | 兆芯 | x86_64 | Zhaoxin、兆芯、KH-30000 |
+| 申威 1618 | 申威 | sw_64 | Sunway、申威、SW64 |
+| 申威 3231 | 申威 | sw_64 | Sunway、申威、SW64 |
+
+### CPU 检测策略
+
+1. **lscpu 优先**：优先使用 `lscpu` 命令获取 CPU 型号（在虚拟机环境中更准确）
+2. **/proc/cpuinfo 回退**：依次检测以下字段：
+   - `model name`（x86 架构通用）
+   - `Model\s*:`（鲲鹏等 ARM 处理器）
+   - `Hardware`（飞腾等 aarch64 处理器）
+   - `cpu model`（MIPS 等架构）
+   - `cpu\s*:`（部分嵌入式处理器）
+   - `cpu part`（ARM 处理器型号编码）
+3. **虚拟化过滤**：自动过滤包含 bios、virt、qemu、bochs 的结果，避免虚拟机显示虚拟 CPU
 
 ---
 
@@ -177,10 +224,11 @@ chmod +x syscheck.sh
 | NTFS 分区 | 检测是否存在 NTFS 分区（可能安装 Windows） |
 
 **排除项**：以下启动项会被排除，不判定为双系统：
-- BIOS/固件工具：BootManagerMenuApp、BIOS Setup、Enter Setup
-- 恢复工具：SystemResetApp、Recovery、Backup
-- 网络启动：PXE、Network Boot
-- 诊断工具：Diagnostic、Tools、Diags
+- BIOS/固件工具：BootManagerMenuApp、BIOS Setup、Enter Setup、Consolidated Boot Manager
+- 恢复工具：SystemResetApp、Recovery、Backup、BIOS Backup and Recovery
+- 网络启动：PXE、Network Boot、UEFI PXE App
+- 诊断工具：Diagnostic、Tools、Diags、HISI
+- 保留分区：RESERVE、Shell、fw
 
 ---
 
@@ -227,6 +275,7 @@ chmod +x syscheck.sh
 2. **非 root 用户**：脚本会自动检测权限并跳过需要 root 的检测项
    - 跳过的检测：`efibootmgr`、`dmidecode`、`os-prober`
    - 替代方案：`systemctl list-unit-files` 替代 `systemctl list-units`
+   - `netstat -tln` 替代 `netstat -tlnp`（去掉需 root 的 `-p` 参数）
 3. **最低权限**：若无法使用 root，至少需要：
    - 读取 `/proc/cpuinfo` 的权限（获取 CPU 信息）
    - 读取 `/etc/*-release` 系列文件的权限（获取操作系统信息）
@@ -245,6 +294,16 @@ chmod +x syscheck.sh
 - 各系统专有检测命令优先执行，确保识别结果准确（如麒麟的 `nkvers`）
 - 同一系统的桌面版和服务器版可能输出不同名称，在合规检查时需分别配置
 - 部分国产操作系统的 release 文件格式不统一，脚本做了多层解析适配
+- 麒麟系统 `nkvers` 输出含 `#` 号装饰线，脚本自动清理
+- 统信 UOS 同时包含 `/etc/uos-release` 和 `/etc/deepin-release`，脚本优先识别 UOS
+- 华为云 EulerOS (HCE) 已适配双系统检测排除
+
+### CPU 检测
+
+- 优先使用 `lscpu` 获取型号，在虚拟机环境中更准确
+- 自动过滤虚拟化标识（bios、virt、qemu、bochs），虚拟机中不会错误显示虚拟 CPU
+- aarch64 架构通过 `Hardware` 和 `cpu part` 字段检测飞腾、鲲鹏等处理器
+- 版本号支持纯整数格式（如 KylinSec OS 3）和带小数点格式（如 V10.1）
 
 ### 数据库检测
 
@@ -282,37 +341,59 @@ chmod +x syscheck.sh
 | 批量导入 | 拖拽或点击上传多个 XML 文件 |
 | 卡片展示 | 每台主机一张卡片，显示系统名称、版本、CPU、数据库、双系统、机器品牌等信息 |
 | 合规检查 | 配置允许列表，自动判断每项信息是否合规 |
+| 规则导入 | 从 Excel 文件导入合规规则，支持 Sheet 页和列选择 |
 | 筛选过滤 | 按合规状态（全部/合规/不合规）和操作系统类型筛选 |
 | 搜索 | 按 IP、主机名、系统名称等关键词搜索 |
 | CSV 导出 | 导出包含合规状态的数据表格，支持 Excel 打开 |
 
 ### 合规检查规则
 
-共 7 个检查项，每项可独立配置：
+共 7 个检查项，每项可独立配置，页面加载时自动填入默认规则：
 
-| 检查项 | 说明 |
-|-------|------|
-| 系统名称 | 操作系统名称需在合规列表中 |
-| 系统版本 | 操作系统版本需在合规列表中 |
-| CPU型号 | CPU 型号需在合规列表中 |
-| CPU架构 | CPU 架构需在合规列表中（如 x86_64、aarch64、loongarch64） |
-| 数据库类型 | 检测到的**所有**数据库必须在合规列表中才算合规，任一数据库不在列表即为不合规 |
-| 双系统 | 双系统状态需在合规列表中（如"否"表示不允许双系统） |
-| 机器品牌 | 机器品牌需在合规列表中 |
+| 检查项 | 默认规则 |
+|-------|---------|
+| 系统名称 | kylin、uos、麒麟、统信、Euler、欧拉、方德、Deepin、openEuler、Anolis |
+| 系统版本 | V10、V20、1050、1060、20、23、7、8、9 |
+| CPU型号 | Kunpeng、飞腾、龙芯、Loongson、海光、Hygon、兆芯、Zhaoxin、申威、Sunway |
+| CPU架构 | x86_64、aarch64、loongarch64、sw_64 |
+| 数据库类型 | 达梦、金仓、华为GaussDB、瀚高、南大通用、神舟通用、海量、虚谷、万里开源、平凯、中兴GoldenDB、奥星贝斯、TaurusDB、PolarDB、TDSQL、优炫、东方金信 |
+| 双系统 | 否 |
+| 机器品牌 | 联想、华为、戴尔、惠普、华硕、浪潮、曙光、长城、宝德、紫光、新华三、中兴、神舟、宏碁、清华同方、海尔 |
 
 **判定规则**：
-- 采用模糊匹配（双向包含），如合规列表中写"达梦"，检测到"达梦 8.1"也判定合规
+- 采用模糊匹配（双向包含），大小写不敏感，如规则写"kylin"，检测到"Kylin Linux"也判定合规
+- 数据库类型：检测到的**所有**数据库必须在合规列表中才算合规，任一数据库不在列表即为不合规
 - 多项检查中**任一不合规**，整条记录标记为不合规
 - 未配置规则的检查项不参与判定
 - 无数据库时不参与数据库合规判定
+
+### 规则导入
+
+支持从 Excel 文件（.xlsx / .xls / .csv）导入合规规则：
+
+1. 点击"导入规则"按钮
+2. 选择 Excel 文件
+3. 在弹窗中选择规则项、Sheet 页和列
+4. 预览解析结果
+5. 点击"导入"覆盖当前规则
+
+**数据格式**：支持 `;` 分隔的多关键字行，例如：
+
+| 数据库字段 |
+|-----------|
+| 达梦;disql;dmserver |
+| PolarDB |
+| TDSQL |
+
+解析结果：`达梦`、`disql`、`dmserver`、`PolarDB`、`TDSQL`
 
 ### 使用流程
 
 1. 打开 `viewer.html`
 2. 拖拽或点击上传 `sysinfo_*.xml` 文件（支持多选）
 3. 查看卡片信息
-4. （可选）展开左侧合规配置面板，输入合规列表
-5. 点击"应用规则"执行合规检查
+4. 合规规则已自动填入，可直接点击"应用合规规则"
+5. （可选）手动修改规则或从 Excel 导入规则
 6. 使用筛选和搜索查看结果
 7. 点击"导出CSV"下载数据
 
@@ -348,9 +429,3 @@ XCcheck/
 
 ---
 
-## 版本
-
-- **v1.3.0** — 增加 Docker 容器数据库检测、双系统检测、机器品牌检测、非 root 权限适配
-- **v1.2.0** — 增加信创数据库检测（24种）、合规检查支持数据库类型
-- **v1.1.0** — 增加信创数据库检测（18种）、合规检查支持数据库类型
-- **v1.0.0** — 初始版本，操作系统和 CPU 信息采集、合规检查、CSV 导出
