@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPT_NAME="系统信息采集脚本"
-SCRIPT_VERSION="1.2.0"
+SCRIPT_VERSION="1.2.1"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 DATE_STR=$(date '+%Y%m%d')
 HOSTNAME_VAL=$(hostname 2>/dev/null || echo "Unknown")
@@ -10,6 +10,17 @@ if [ "$(id -u)" = "0" ]; then
     IS_ROOT=1
 else
     IS_ROOT=0
+fi
+
+_DOCKER_AVAILABLE=0
+if command -v docker >/dev/null 2>&1; then
+    if [ "$IS_ROOT" = "1" ]; then
+        _DOCKER_AVAILABLE=1
+    elif groups 2>/dev/null | grep -q docker; then
+        _DOCKER_AVAILABLE=1
+    elif timeout 3 docker ps >/dev/null 2>&1; then
+        _DOCKER_AVAILABLE=1
+    fi
 fi
 
 get_first_ip() {
@@ -636,30 +647,19 @@ db_check_service() {
     local svc_pattern="$2"
     local ver_cmd="$3"
 
-    if command -v systemctl >/dev/null 2>&1; then
-        if [ "$IS_ROOT" = "1" ]; then
-            if systemctl list-units --type=service --all 2>/dev/null | grep -qi "$svc_pattern"; then
-                local ver=""
-                if [ -n "$ver_cmd" ]; then
-                    ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
-                fi
-                db_add "$db_name" "$ver"
-                return
+    if [ -n "$_SYSTEMD_CACHE" ]; then
+        if echo "$_SYSTEMD_CACHE" | grep -qi "$svc_pattern"; then
+            local ver=""
+            if [ -n "$ver_cmd" ]; then
+                ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
             fi
-        else
-            if systemctl list-unit-files --type=service 2>/dev/null | grep -qi "$svc_pattern"; then
-                local ver=""
-                if [ -n "$ver_cmd" ]; then
-                    ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
-                fi
-                db_add "$db_name" "$ver"
-                return
-            fi
+            db_add "$db_name" "$ver"
+            return
         fi
     fi
 
-    if command -v service >/dev/null 2>&1; then
-        if service --status-all 2>/dev/null | grep -qi "$svc_pattern"; then
+    if [ -n "$_SERVICE_CACHE" ]; then
+        if echo "$_SERVICE_CACHE" | grep -qi "$svc_pattern"; then
             local ver=""
             if [ -n "$ver_cmd" ]; then
                 ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
@@ -719,24 +719,19 @@ db_check_docker() {
     local db_name="$1"
     local image_keywords="$2"
 
-    if ! command -v docker >/dev/null 2>&1; then
+    if [ "$_DOCKER_AVAILABLE" = "0" ]; then
         return
     fi
 
-    local docker_out
-    docker_out=$(docker ps --format '{{.Image}} {{.Names}}' 2>/dev/null)
-    if [ -z "$docker_out" ]; then
+    if [ -z "$_DOCKER_PS_CACHE" ]; then
         return
     fi
 
     for kw in $image_keywords; do
-        if echo "$docker_out" | grep -qi "$kw"; then
+        if echo "$_DOCKER_PS_CACHE" | grep -qi "$kw"; then
             local ver=""
             local container_id
-            container_id=$(docker ps --filter "ancestor=$kw" --format '{{.ID}}' 2>/dev/null | head -1)
-            if [ -z "$container_id" ]; then
-                container_id=$(docker ps --format '{{.ID}} {{.Image}} {{.Names}}' 2>/dev/null | grep -i "$kw" | head -1 | awk '{print $1}')
-            fi
+            container_id=$(echo "$_DOCKER_PS_CACHE" | grep -i "$kw" | head -1 | awk '{print $1}')
             if [ -n "$container_id" ]; then
                 local img
                 img=$(docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null)
@@ -754,6 +749,27 @@ db_check_docker() {
 detect_databases() {
     _DB_RESULTS=""
     _DB_FOUND=""
+    _SYSTEMD_CACHE=""
+    _DOCKER_PS_CACHE=""
+    _SERVICE_CACHE=""
+
+    if [ "$IS_ROOT" = "1" ] && command -v systemctl >/dev/null 2>&1; then
+        _SYSTEMD_CACHE=$(systemctl list-units --type=service --all --no-pager 2>/dev/null)
+    elif [ "$IS_ROOT" = "0" ]; then
+        _SYSTEMD_CACHE=$(ls /etc/systemd/system/*.service /usr/lib/systemd/system/*.service /lib/systemd/system/*.service 2>/dev/null | sed 's/.*\///; s/\.service$//')
+    fi
+
+    if command -v service >/dev/null 2>&1; then
+        if [ "$IS_ROOT" = "1" ]; then
+            _SERVICE_CACHE=$(service --status-all 2>/dev/null)
+        else
+            _SERVICE_CACHE=$(ls /etc/init.d/ 2>/dev/null)
+        fi
+    fi
+
+    if [ "$_DOCKER_AVAILABLE" = "1" ]; then
+        _DOCKER_PS_CACHE=$(docker ps --format '{{.ID}} {{.Image}} {{.Names}}' 2>/dev/null)
+    fi
 
     db_check_cmd "达梦" "dmserver" "dmserver -V"
     db_check_cmd "达梦" "disql" "disql -V"
