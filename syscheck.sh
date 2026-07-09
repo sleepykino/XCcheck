@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPT_NAME="系统信息采集脚本"
-SCRIPT_VERSION="1.2.1"
+SCRIPT_VERSION="1.2.2"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 DATE_STR=$(date '+%Y%m%d')
 HOSTNAME_VAL=$(hostname 2>/dev/null || echo "Unknown")
@@ -434,7 +434,7 @@ check_dual_boot() {
         fi
     fi
 
-    if [ "$result" = "否" ] && [ -f /boot/efi/EFI ]; then
+    if [ "$result" = "否" ] && [ -d /boot/efi/EFI ]; then
         local efi_out
         efi_out=$(ls /boot/efi/EFI/ 2>/dev/null)
         if echo "$efi_out" | grep -qi "windows\|Microsoft"; then
@@ -454,7 +454,7 @@ check_dual_boot() {
                         found_os="Windows"
                         break
                         ;;
-                    BOOT|boot|kylin|Kylin|uos|UOS|deepin|Deepin|openEuler|hce|HCE|centos|ubuntu|fedora|HISI|hisi|tools|diags|diag|resource|RESERVE|reserve|shell|SHELL|tool|tools|fw|FW)
+                    BOOT|boot|kylin|Kylin|uos|UOS|deepin|Deepin|openEuler|OpenEuler|openeuler|hce|HCE|centos|ubuntu|fedora|debian|Debian|arch|Arch|manjaro|suse|SUSE|opensuse|gentoo|Gentoo|redhat|RedHat|rocky|Rocky|alma|Alma|anolis|Anolis|alinux|Alinux|photon|Photon|HISI|hisi|tools|diags|diag|resource|RESERVE|reserve|shell|SHELL|tool|fw|FW|VMware|vmware|Xen|xen|OVMF|Parallels|parallels|VirtualBox|grub|GRUB|shim|Linux|linux|YMTC|ymtc|INTEL|intel|SAMSUNG|samsung|WD|wdc|sandisk|SanDisk|KIOXIA|kioxia|TOSHIBA|toshiba|MICRON|micron|CRUCIAL|crucial|SKHynix|hynix|KINGSTON|kingston|ADATA|adata|BIWIN|biwin|FORESEE|foresee|NETAC|netac|UNIC|unic|DELL|dell|LENOVO|lenovo|HP|hp|ASUS|asus|ACER|acer|MSI|msi|GIGABYTE|gigabyte|ASROCK|asrock|SUPERMICRO|supermicro|INSPUR|inspur|SUGON|sugon|HUAWEI|huawei|GREATWALL|greatwall|MEMORY|memory|MEMTEST|memtest|ANDROID|android|UBUNTU|ubuntu)
                         ;;
                     *)
                         if [ "$result" = "否" ]; then
@@ -476,7 +476,7 @@ check_dual_boot() {
                 found_os="Windows"
             elif echo "$efi_boot" | grep -qi "BootOrder"; then
                 local other_boot
-                other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|linux\|deepin\|uos\|openeuler\|euler\|hce\|centos\|ubuntu\|fedora\|shell\|bootmanagermenu\|byouiapp\|boot manager\|consolidated boot\|fdi\|diagnostic\|bios\|setup\|systemreset\|recovery\|backup\|ip4\|ip6\|pxe\|network\|usb\|cdrom\|card\|nvme\|sata\|ahci\|raid\|ieee" | head -1)
+                other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|linux\|deepin\|uos\|openeuler\|euler\|hce\|centos\|ubuntu\|fedora\|debian\|arch\|manjaro\|suse\|opensuse\|gentoo\|redhat\|rocky\|alma\|anolis\|alinux\|photon\|shell\|bootmanagermenu\|byouiapp\|boot manager\|consolidated boot\|fdi\|diagnostic\|bios\|setup\|systemreset\|recovery\|backup\|ip4\|ip6\|ip4\|ip6\|pxe\|http\|https\|booturi\|network\|usb\|cdrom\|card\|nvme\|sata\|ahci\|raid\|ieee\|firmware\|uefi\|macos\|apple\|mac\|harddrive\|lan\|wlan\|wifi\|bluetooth\|none\|unknown\|enter setup\|onboard\|pcie\|pci-e\|pci" | head -1)
                 if [ -n "$other_boot" ]; then
                     result="是"
                     found_os=$(echo "$other_boot" | sed 's/^Boot[0-9]\+\**\s*//')
@@ -497,9 +497,33 @@ check_dual_boot() {
     fi
 
     if [ "$result" = "否" ] && command -v blkid >/dev/null 2>&1; then
-        local ntfs_parts
-        ntfs_parts=$(blkid 2>/dev/null | grep -i "ntfs\|microsoft\|windows" | head -1)
-        if [ -n "$ntfs_parts" ]; then
+        local ntfs_found=""
+        local part_line
+        while IFS= read -r part_line; do
+            [ -z "$part_line" ] && continue
+            local part_dev
+            part_dev=$(echo "$part_line" | cut -d: -f1)
+            local part_size=""
+            if command -v blockdev >/dev/null 2>&1; then
+                part_size=$(blockdev --getsize64 "$part_dev" 2>/dev/null)
+            fi
+            if [ -n "$part_size" ] && [ "$part_size" -ge 5368709120 ]; then
+                ntfs_found="$part_line"
+                break
+            fi
+            # blockdev不可用或失败时，尝试fdisk获取分区大小
+            if [ -z "$part_size" ] && command -v fdisk >/dev/null 2>&1; then
+                local fdisk_size
+                fdisk_size=$(fdisk -l "$part_dev" 2>/dev/null | grep "^Disk $part_dev" | grep -oE '[0-9]+ bytes' | grep -oE '^[0-9]+')
+                if [ -n "$fdisk_size" ] && [ "$fdisk_size" -ge 5368709120 ]; then
+                    ntfs_found="$part_line"
+                    break
+                fi
+            fi
+        done <<EOF
+$(blkid 2>/dev/null | grep -i "ntfs" | head -5)
+EOF
+        if [ -n "$ntfs_found" ]; then
             result="是"
             found_os="Windows(NTFS分区)"
         fi
@@ -557,7 +581,7 @@ get_machine_vendor() {
         case "$vendor" in
             "LENOVO"|"Lenovo"|"lenovo")
                 vendor="联想";;
-            "HUAWEI"|"Huawei"|"huawei")
+            "HUAWEI"|"Huawei"|"huawei"|"Huawei Cloud")
                 vendor="华为";;
             "DELL"|"Dell"|"dell")
                 vendor="戴尔";;
