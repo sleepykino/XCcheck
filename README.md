@@ -396,36 +396,3 @@ chmod +x syscheck.sh
 5. （可选）手动修改规则或从 Excel 导入规则
 6. 使用筛选和搜索查看结果
 7. 点击"导出CSV"下载数据
-
----
-
-## 测试文件
-
-项目包含 5 个测试 XML 文件，可用于验证 viewer.html 功能：
-
-| 文件 | 系统 | 数据库 | 双系统 | 机器品牌 |
-|-----|------|--------|--------|---------|
-| test_kylin_compliant.xml | 银河麒麟（桌面版） | 达梦 8.1 | 否 | 联想 |
-| test_uos_compliant.xml | 统信UOS（桌面版） | 金仓 V8R6 | 否 | 华为 |
-| test_founder_compliant.xml | 中科方德（桌面版） | 华为GaussDB 3.0 + 瀚高 9.5 | 否 | 戴尔 |
-| test_kylin_server_compliant.xml | 银河麒麟（服务器版） | 不存在数据库 | 否 | 浪潮 |
-| test_anolis_noncompliant.xml | 龙蜥Anolis OS | MySQL 8.0.32 | 是(Windows) | Unknown |
-
----
-
-## 目录结构
-
-```
-XCcheck/
-├── syscheck.sh                          # 采集脚本
-├── viewer.html                          # 网页解析工具
-├── test_kylin_compliant.xml             # 测试文件
-├── test_uos_compliant.xml               # 测试文件
-├── test_founder_compliant.xml           # 测试文件
-├── test_kylin_server_compliant.xml      # 测试文件
-├── test_anolis_noncompliant.xml         # 测试文件
-└── README.md                            # 本文档
-```
-
----
-

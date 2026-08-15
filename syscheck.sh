@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPT_NAME="系统信息采集脚本"
-SCRIPT_VERSION="1.2.2"
+SCRIPT_VERSION="1.3.0"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 DATE_STR=$(date '+%Y%m%d')
 HOSTNAME_VAL=$(hostname 2>/dev/null || echo "Unknown")
@@ -994,6 +994,12 @@ detect_databases() {
     fi
 }
 
+get_uptime_history() {
+    if command -v last >/dev/null 2>&1; then
+        last reboot 2>/dev/null | head -20
+    fi
+}
+
 xml_escape() {
     local s="$1"
     s=$(echo "$s" | sed 's/&/\&amp;/g')
@@ -1018,6 +1024,7 @@ KERNEL_VERSION=$(get_kernel_version)
 DUAL_BOOT=$(check_dual_boot)
 MACHINE_VENDOR=$(get_machine_vendor)
 DB_RESULT=$(detect_databases)
+UPTIME_HISTORY=$(get_uptime_history)
 
 if [ "$IS_ROOT" = "0" ]; then
     echo "[!] 当前非root权限运行，部分检测项可能不完整（如efibootmgr、dmidecode、os-prober）"
@@ -1035,6 +1042,8 @@ echo "[*] 数据库:      ${DB_RESULT}"
 echo "[*] 双系统:      ${DUAL_BOOT}"
 echo "[*] 机器品牌:    ${MACHINE_VENDOR}"
 echo "[*] 采集时间:    ${TIMESTAMP}"
+echo "[*] 开机历史:"
+echo "${UPTIME_HISTORY}"
 echo ""
 
 OUTPUT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -1055,6 +1064,7 @@ DUAL_BOOT_OS=$(echo "$DUAL_BOOT" | cut -d'|' -f2)
 DUAL_BOOT_FLAG_E=$(xml_escape "$DUAL_BOOT_FLAG")
 DUAL_BOOT_OS_E=$(xml_escape "$DUAL_BOOT_OS")
 MACHINE_VENDOR_E=$(xml_escape "$MACHINE_VENDOR")
+UPTIME_HISTORY_E=$(xml_escape "$UPTIME_HISTORY")
 
 DB_XML="  <Database>不存在数据库</Database>"
 
@@ -1096,6 +1106,7 @@ cat > "$OUTPUT_FILE" << XMLEOF
     <OS>${DUAL_BOOT_OS_E}</OS>
   </DualBoot>
   <MachineVendor>${MACHINE_VENDOR_E}</MachineVendor>
+  <UptimeHistory>${UPTIME_HISTORY_E}</UptimeHistory>
 ${DB_XML}
 </SystemInfo>
 XMLEOF
