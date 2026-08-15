@@ -13,5 +13,10 @@
     <Architecture>loongarch64</Architecture>
     <Cores>4</Cores>
   </CPU>
+  <DualBoot>
+    <Flag>否</Flag>
+    <OS></OS>
+  </DualBoot>
+  <MachineVendor>联想</MachineVendor>
   <Database><Name>达梦</Name><Version>8.1</Version></Database>
 </SystemInfo>

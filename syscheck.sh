@@ -1,10 +1,27 @@
 #!/bin/bash
 
 SCRIPT_NAME="系统信息采集脚本"
-SCRIPT_VERSION="1.2.0"
+SCRIPT_VERSION="1.3.0"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 DATE_STR=$(date '+%Y%m%d')
 HOSTNAME_VAL=$(hostname 2>/dev/null || echo "Unknown")
+
+if [ "$(id -u)" = "0" ]; then
+    IS_ROOT=1
+else
+    IS_ROOT=0
+fi
+
+_DOCKER_AVAILABLE=0
+if command -v docker >/dev/null 2>&1; then
+    if [ "$IS_ROOT" = "1" ]; then
+        _DOCKER_AVAILABLE=1
+    elif groups 2>/dev/null | grep -q docker; then
+        _DOCKER_AVAILABLE=1
+    elif timeout 3 docker ps >/dev/null 2>&1; then
+        _DOCKER_AVAILABLE=1
+    fi
+fi
 
 get_first_ip() {
     local ip=""
@@ -61,34 +78,53 @@ get_os_name() {
 
     if command -v nkvers >/dev/null 2>&1; then
         local nkout
-        nkout=$(nkvers 2>/dev/null)
+        nkout=$(nkvers 2>/dev/null | sed 's/#//g')
         if echo "$nkout" | grep -qi "kylin\|麒麟"; then
-            os_name=$(echo "$nkout" | grep -i "Release" | head -1 | sed 's/.*:\s*//' | tr -d '"' | awk '{print $1}')
-            [ -z "$os_name" ] && os_name=$(echo "$nkout" | head -1 | awk '{print $1" "$2" "$3}')
+            os_name=$(echo "$nkout" | grep -i "^Kylin Linux" | grep -vi "Version" | head -1 | awk '{print $1" "$2" "$3}')
+            if [ -z "$os_name" ]; then
+                os_name=$(echo "$nkout" | grep -i "release" | grep -vi "^$" | grep -vi "Version\|Kernel\|Build" | head -1 | awk '{print $1" "$2" "$3}')
+            fi
+            if [ -z "$os_name" ]; then
+                os_name=$(echo "$nkout" | grep -i "Kylin" | grep -vi "Version\|Kernel\|Build" | head -1 | awk '{print $1" "$2" "$3}')
+            fi
             [ -n "$os_name" ] && echo "$os_name" && return
         fi
     fi
 
     if [ -f /etc/kylin-release ]; then
-        os_name=$(head -1 /etc/kylin-release | awk '{print $1" "$2" "$3}')
+        os_name=$(head -1 /etc/kylin-release | sed 's/#//g' | awk '{print $1" "$2" "$3}')
         [ -n "$os_name" ] && echo "$os_name" && return
     fi
 
     if [ -f /etc/neokylin-release ]; then
-        os_name=$(head -1 /etc/neokylin-release | awk '{print $1" "$2" "$3}')
+        os_name=$(head -1 /etc/neokylin-release | sed 's/#//g' | awk '{print $1" "$2" "$3}')
         [ -n "$os_name" ] && echo "$os_name" && return
     fi
 
     if [ -f /etc/uos-release ]; then
         os_name=$(grep "^NAME=" /etc/uos-release 2>/dev/null | head -1 | sed 's/NAME=//' | tr -d '"' | awk '{print $1" "$2}')
+        if [ -z "$os_name" ]; then
+            os_name=$(head -1 /etc/uos-release | awk '{print $1" "$2}')
+        fi
+        if [ -z "$os_name" ]; then
+            os_name="统信UOS"
+        fi
         [ -n "$os_name" ] && echo "$os_name" && return
     fi
 
     if [ -f /etc/deepin-release ] || [ -f /etc/deepin-version ]; then
-        local df="/etc/deepin-release"
-        [ -f /etc/deepin-version ] && df="/etc/deepin-version"
-        os_name=$(head -1 "$df" | awk '{print $1" "$2" "$3}')
-        [ -n "$os_name" ] && echo "$os_name" && return
+        local is_uos=0
+        if [ -f /etc/uos-release ]; then
+            is_uos=1
+        elif [ -f /etc/os-release ] && grep -qi "uos\|Uniontech" /etc/os-release 2>/dev/null; then
+            is_uos=1
+        fi
+        if [ "$is_uos" = "0" ]; then
+            local df="/etc/deepin-release"
+            [ -f /etc/deepin-version ] && df="/etc/deepin-version"
+            os_name=$(head -1 "$df" | awk '{print $1" "$2" "$3}')
+            [ -n "$os_name" ] && echo "$os_name" && return
+        fi
     fi
 
     if [ -f /etc/openEuler-release ]; then
@@ -172,36 +208,66 @@ get_os_version() {
 
     if command -v nkvers >/dev/null 2>&1; then
         local nkout
-        nkout=$(nkvers 2>/dev/null)
+        nkout=$(nkvers 2>/dev/null | sed 's/#//g')
         if echo "$nkout" | grep -qi "kylin\|麒麟"; then
-            os_version=$(echo "$nkout" | grep -i "Version" | head -1 | sed 's/.*:\s*//' | tr -d '"' | awk '{print $1}')
+            os_version=$(echo "$nkout" | grep -i "^Kylin Linux" | grep -vi "Version" | head -1 | sed 's/.*[Rr]elease\s*//')
+            if [ -z "$os_version" ]; then
+                os_version=$(echo "$nkout" | grep -oE 'V[0-9]+(\.[0-9]+)*' | head -1)
+            fi
+            if [ -z "$os_version" ]; then
+                os_version=$(echo "$nkout" | grep -i "Kernel" | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+            fi
             [ -n "$os_version" ] && echo "$os_version" && return
         fi
     fi
 
     if [ -f /etc/kylin-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/kylin-release | head -1)
+        os_version=$(head -1 /etc/kylin-release | sed 's/#//g' | sed 's/.*release\s*//' | awk '{print $0}')
+        if [ -z "$os_version" ]; then
+            os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/kylin-release | head -1)
+        fi
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/neokylin-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/neokylin-release | head -1)
+        os_version=$(head -1 /etc/neokylin-release | sed 's/#//g' | sed 's/.*release\s*//' | awk '{print $0}')
+        if [ -z "$os_version" ]; then
+            os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/neokylin-release | head -1)
+        fi
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/uos-release ]; then
         os_version=$(grep "^VERSION=" /etc/uos-release 2>/dev/null | head -1 | sed 's/VERSION=//' | tr -d '"')
+        if [ -z "$os_version" ]; then
+            os_version=$(grep "^VERSION_ID=" /etc/uos-release 2>/dev/null | head -1 | sed 's/VERSION_ID=//' | tr -d '"')
+        fi
+        if [ -z "$os_version" ]; then
+            os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/uos-release | head -1)
+        fi
         [ -n "$os_version" ] && echo "$os_version" && return
     fi
 
     if [ -f /etc/deepin-version ]; then
-        os_version=$(grep -i "version" /etc/deepin-version 2>/dev/null | head -1 | sed 's/.*[=:]\s*//' | tr -d '"' | awk '{print $1}')
-        [ -n "$os_version" ] && echo "$os_version" && return
+        if [ -f /etc/uos-release ]; then
+            :
+        elif [ -f /etc/os-release ] && grep -qi "uos\|Uniontech" /etc/os-release 2>/dev/null; then
+            :
+        else
+            os_version=$(grep -i "version" /etc/deepin-version 2>/dev/null | head -1 | sed 's/.*[=:]\s*//' | tr -d '"' | awk '{print $1}')
+            [ -n "$os_version" ] && echo "$os_version" && return
+        fi
     fi
 
     if [ -f /etc/deepin-release ]; then
-        os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/deepin-release | head -1)
-        [ -n "$os_version" ] && echo "$os_version" && return
+        if [ -f /etc/uos-release ]; then
+            :
+        elif [ -f /etc/os-release ] && grep -qi "uos\|Uniontech" /etc/os-release 2>/dev/null; then
+            :
+        else
+            os_version=$(grep -oE '[0-9]+(\.[0-9]+)*' /etc/deepin-release | head -1)
+            [ -n "$os_version" ] && echo "$os_version" && return
+        fi
     fi
 
     if [ -f /etc/openEuler-release ]; then
@@ -283,29 +349,40 @@ get_os_version() {
 get_cpu_model() {
     local cpu_model=""
 
-    if [ -f /proc/cpuinfo ]; then
-        cpu_model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | sed 's/model name\s*:\s*//')
+    if command -v lscpu >/dev/null 2>&1; then
+        cpu_model=$(lscpu 2>/dev/null | grep -m1 "Model name" | sed 's/Model name:\s*//')
         if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "^Model\s*:" /proc/cpuinfo 2>/dev/null | sed 's/Model\s*:\s*//')
-        fi
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "Hardware" /proc/cpuinfo 2>/dev/null | sed 's/Hardware\s*:\s*//')
-        fi
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "cpu model" /proc/cpuinfo 2>/dev/null | sed 's/cpu model\s*:\s*//')
-        fi
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "^cpu\s*:" /proc/cpuinfo 2>/dev/null | sed 's/^cpu\s*:\s*//')
-        fi
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(grep -m1 "cpu part" /proc/cpuinfo 2>/dev/null | sed 's/cpu part\s*:\s*//')
+            cpu_model=$(lscpu 2>/dev/null | grep -m1 "Hypervisor vendor" | sed 's/Hypervisor vendor:\s*//')
         fi
     fi
 
-    if [ -z "$cpu_model" ] && command -v lscpu >/dev/null 2>&1; then
-        cpu_model=$(lscpu 2>/dev/null | grep -m1 "Model name" | sed 's/Model name:\s*//')
-        if [ -z "$cpu_model" ]; then
-            cpu_model=$(lscpu 2>/dev/null | grep -m1 "Architecture" | awk '{print $2}')
+    if [ -f /proc/cpuinfo ]; then
+        local proc_cpu
+        proc_cpu=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | sed 's/model name\s*:\s*//')
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "^Model\s*:" /proc/cpuinfo 2>/dev/null | sed 's/Model\s*:\s*//')
+        fi
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "Hardware" /proc/cpuinfo 2>/dev/null | sed 's/Hardware\s*:\s*//')
+        fi
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "cpu model" /proc/cpuinfo 2>/dev/null | sed 's/cpu model\s*:\s*//')
+        fi
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "^cpu\s*:" /proc/cpuinfo 2>/dev/null | sed 's/^cpu\s*:\s*//')
+        fi
+        if [ -z "$proc_cpu" ]; then
+            proc_cpu=$(grep -m1 "cpu part" /proc/cpuinfo 2>/dev/null | sed 's/cpu part\s*:\s*//')
+        fi
+        if echo "$cpu_model" | grep -qi "bios\|virt\|qemu\|bochs"; then
+            cpu_model=""
+        fi
+        if [ -z "$cpu_model" ] && [ -n "$proc_cpu" ]; then
+            if echo "$proc_cpu" | grep -qi "bios\|virt\|qemu\|bochs"; then
+                :
+            else
+                cpu_model="$proc_cpu"
+            fi
         fi
     fi
 
@@ -333,6 +410,217 @@ get_kernel_version() {
     local kv=""
     kv=$(uname -r 2>/dev/null)
     echo "${kv:-Unknown}"
+}
+
+check_dual_boot() {
+    local result="否"
+    local found_os=""
+
+    if [ -f /boot/grub2/grub.cfg ]; then
+        local grub_out
+        grub_out=$(grep -i "menuentry\|windows" /boot/grub2/grub.cfg 2>/dev/null)
+        if echo "$grub_out" | grep -qi "windows"; then
+            result="是"
+            found_os="Windows"
+        fi
+    fi
+
+    if [ "$result" = "否" ] && [ -f /boot/grub/grub.cfg ]; then
+        local grub_out
+        grub_out=$(grep -i "menuentry\|windows" /boot/grub/grub.cfg 2>/dev/null)
+        if echo "$grub_out" | grep -qi "windows"; then
+            result="是"
+            found_os="Windows"
+        fi
+    fi
+
+    if [ "$result" = "否" ] && [ -d /boot/efi/EFI ]; then
+        local efi_out
+        efi_out=$(ls /boot/efi/EFI/ 2>/dev/null)
+        if echo "$efi_out" | grep -qi "windows\|Microsoft"; then
+            result="是"
+            found_os="Windows"
+        fi
+    fi
+
+    if [ "$result" = "否" ] && [ -d /sys/firmware/efi ]; then
+        for d in /boot/efi/EFI/*/; do
+            if [ -d "$d" ]; then
+                local dirname
+                dirname=$(basename "$d")
+                case "$dirname" in
+                    microsoft|Microsoft|Windows|windows)
+                        result="是"
+                        found_os="Windows"
+                        break
+                        ;;
+                    BOOT|boot|kylin|Kylin|neokylin|NeoKylin|NEOKYLIN|uos|UOS|deepin|Deepin|openEuler|OpenEuler|openeuler|hce|HCE|centos|ubuntu|fedora|debian|Debian|arch|Arch|manjaro|suse|SUSE|opensuse|gentoo|Gentoo|redhat|RedHat|rocky|Rocky|alma|Alma|anolis|Anolis|alinux|Alinux|photon|Photon|HISI|hisi|tools|diags|diag|resource|RESERVE|reserve|shell|SHELL|tool|fw|FW|VMware|vmware|Xen|xen|OVMF|Parallels|parallels|VirtualBox|grub|GRUB|shim|Linux|linux|YMTC|ymtc|INTEL|intel|SAMSUNG|samsung|WD|wdc|sandisk|SanDisk|KIOXIA|kioxia|TOSHIBA|toshiba|MICRON|micron|CRUCIAL|crucial|SKHynix|hynix|KINGSTON|kingston|ADATA|adata|BIWIN|biwin|FORESEE|foresee|NETAC|netac|UNIC|unic|DELL|dell|LENOVO|lenovo|HP|hp|ASUS|asus|ACER|acer|MSI|msi|GIGABYTE|gigabyte|ASROCK|asrock|SUPERMICRO|supermicro|INSPUR|inspur|SUGON|sugon|HUAWEI|huawei|GREATWALL|greatwall|MEMORY|memory|MEMTEST|memtest|ANDROID|android|UBUNTU|ubuntu)
+                        ;;
+                    *)
+                        if [ "$result" = "否" ]; then
+                            result="是"
+                            found_os="$dirname"
+                        fi
+                        ;;
+                esac
+            fi
+        done
+    fi
+
+    if [ "$result" = "否" ]; then
+        if [ "$IS_ROOT" = "1" ] && command -v efibootmgr >/dev/null 2>&1; then
+            local efi_boot
+            efi_boot=$(efibootmgr 2>/dev/null)
+            if echo "$efi_boot" | grep -qi "windows\|microsoft"; then
+                result="是"
+                found_os="Windows"
+            elif echo "$efi_boot" | grep -qi "BootOrder"; then
+                local other_boot
+                other_boot=$(echo "$efi_boot" | grep "^Boot[0-9]" | grep -vi "kylin\|neokylin\|linux\|deepin\|uos\|openeuler\|euler\|hce\|centos\|ubuntu\|fedora\|debian\|arch\|manjaro\|suse\|opensuse\|gentoo\|redhat\|rocky\|alma\|anolis\|alinux\|photon\|shell\|bootmanagermenu\|byouiapp\|uiapp\|boot manager\|consolidated boot\|fdi\|diagnostic\|bios\|setup\|systemreset\|recovery\|backup\|ip4\|ip6\|pxe\|http\|https\|booturi\|network\|usb\|cdrom\|card\|nvme\|sata\|ahci\|raid\|ieee\|firmware\|uefi\|macos\|apple\|mac\|harddrive\|lan\|wlan\|wifi\|bluetooth\|none\|unknown\|enter setup\|onboard\|pcie\|pci-e\|pci\|misc device\|internal shell" | head -1)
+                if [ -n "$other_boot" ]; then
+                    result="是"
+                    found_os=$(echo "$other_boot" | sed 's/^Boot[0-9]\+\**\s*//')
+                fi
+            fi
+        fi
+    fi
+
+    if [ "$result" = "否" ] && [ "$IS_ROOT" = "1" ] && [ -f /etc/grub.d/30_os-prober ]; then
+        if [ -x /usr/bin/os-prober ] || [ -x /sbin/os-prober ]; then
+            local prober_out
+            prober_out=$(os-prober 2>/dev/null)
+            if [ -n "$prober_out" ]; then
+                result="是"
+                found_os=$(echo "$prober_out" | head -1 | cut -d: -f2 | sed 's/,.*//')
+            fi
+        fi
+    fi
+
+    if [ "$result" = "否" ] && command -v blkid >/dev/null 2>&1; then
+        local ntfs_found=""
+        local part_line
+        while IFS= read -r part_line; do
+            [ -z "$part_line" ] && continue
+            local part_dev
+            part_dev=$(echo "$part_line" | cut -d: -f1)
+            local part_size=""
+            if command -v blockdev >/dev/null 2>&1; then
+                part_size=$(blockdev --getsize64 "$part_dev" 2>/dev/null)
+            fi
+            if [ -n "$part_size" ] && [ "$part_size" -ge 5368709120 ]; then
+                ntfs_found="$part_line"
+                break
+            fi
+            # blockdev不可用或失败时，尝试fdisk获取分区大小
+            if [ -z "$part_size" ] && command -v fdisk >/dev/null 2>&1; then
+                local fdisk_size
+                fdisk_size=$(fdisk -l "$part_dev" 2>/dev/null | grep "^Disk $part_dev" | grep -oE '[0-9]+ bytes' | grep -oE '^[0-9]+')
+                if [ -n "$fdisk_size" ] && [ "$fdisk_size" -ge 5368709120 ]; then
+                    ntfs_found="$part_line"
+                    break
+                fi
+            fi
+        done <<EOF
+$(blkid 2>/dev/null | grep -i "ntfs" | head -5)
+EOF
+        if [ -n "$ntfs_found" ]; then
+            result="是"
+            found_os="Windows(NTFS分区)"
+        fi
+    fi
+
+    if [ -n "$found_os" ]; then
+        echo "${result}|${found_os}"
+    else
+        echo "${result}|"
+    fi
+}
+
+get_machine_vendor() {
+    local vendor=""
+
+    if [ -f /sys/devices/virtual/dmi/id/sys_vendor ]; then
+        vendor=$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$vendor" ] && [ -f /sys/devices/virtual/dmi/id/board_vendor ]; then
+        vendor=$(cat /sys/devices/virtual/dmi/id/board_vendor 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$vendor" ] && [ -f /sys/devices/virtual/dmi/id/chassis_vendor ]; then
+        vendor=$(cat /sys/devices/virtual/dmi/id/chassis_vendor 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$vendor" ] && [ "$IS_ROOT" = "1" ] && command -v dmidecode >/dev/null 2>&1; then
+        vendor=$(dmidecode -s system-manufacturer 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$vendor" ] && [ -f /sys/devices/virtual/dmi/id/product_name ]; then
+        local product
+        product=$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null)
+        if echo "$product" | grep -qi "lenovo\|thinkpad\|ideapad\|legion"; then
+            vendor="Lenovo"
+        elif echo "$product" | grep -qi "huawei\|matebook"; then
+            vendor="Huawei"
+        elif echo "$product" | grep -qi "dell\|inspiron\|latitude\|optiplex\|poweredge"; then
+            vendor="Dell"
+        elif echo "$product" | grep -qi "hp\|probook\|elitebook\|prodesk"; then
+            vendor="HP"
+        elif echo "$product" | grep -qi "asus\|rog\|zenbook"; then
+            vendor="ASUS"
+        elif echo "$product" | grep -qi "acer\|swift\|predator"; then
+            vendor="Acer"
+        elif echo "$product" | grep -qi "hasee"; then
+            vendor="Hasee"
+        elif echo "$product" | grep -qi "thinkvision"; then
+            vendor="Lenovo"
+        fi
+    fi
+
+    if [ -n "$vendor" ]; then
+        case "$vendor" in
+            "LENOVO"|"Lenovo"|"lenovo")
+                vendor="联想";;
+            "HUAWEI"|"Huawei"|"huawei"|"Huawei Cloud")
+                vendor="华为";;
+            "DELL"|"Dell"|"dell")
+                vendor="戴尔";;
+            "HP"|"Hewlett-Packard"|"Hewlett Packard")
+                vendor="惠普";;
+            "ASUS"|"Asus"|"asus"|"ASUSTeK COMPUTER INC."|"ASUSTeK")
+                vendor="华硕";;
+            "ACER"|"Acer"|"acer")
+                vendor="宏碁";;
+            "Hasee"|"hasee"|"HASEE")
+                vendor="神舟";;
+            "Inspur"|"inspur"|"INSPUR")
+                vendor="浪潮";;
+            "Lenovo"|"lenovo"|"LENOVO")
+                vendor="联想";;
+            "Sugon"|"sugon"|"SUGON")
+                vendor="曙光";;
+            "Great Wall"|"GREAT WALL"|"GreatWall"|"greatwall")
+                vendor="长城";;
+            "PowerLeader"|"powerleader"|"POWERLEADER")
+                vendor="宝德";;
+            "UniCloud"|"unicloud"|"UNICLOUD")
+                vendor="紫光";;
+            "H3C"|"h3c"|"H3C")
+                vendor="新华三";;
+            "ZTE"|"zte"|"ZTE Corporation")
+                vendor="中兴";;
+            "Fujitsu"|"fujitsu"|"FUJITSU")
+                vendor="富士通";;
+            "Samsung"|"samsung"|"SAMSUNG")
+                vendor="三星";;
+            "Tongfang"|"tongfang"|"TONGFANG"|"Tsinghua Tongfang")
+                vendor="清华同方";;
+            "Haier"|"haier"|"HAIER")
+                vendor="海尔";;
+        esac
+    fi
+
+    echo "${vendor:-Unknown}"
 }
 
 db_add() {
@@ -383,8 +671,8 @@ db_check_service() {
     local svc_pattern="$2"
     local ver_cmd="$3"
 
-    if command -v systemctl >/dev/null 2>&1; then
-        if systemctl list-units --type=service --all 2>/dev/null | grep -qi "$svc_pattern"; then
+    if [ -n "$_SYSTEMD_CACHE" ]; then
+        if echo "$_SYSTEMD_CACHE" | grep -qi "$svc_pattern"; then
             local ver=""
             if [ -n "$ver_cmd" ]; then
                 ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
@@ -394,8 +682,8 @@ db_check_service() {
         fi
     fi
 
-    if command -v service >/dev/null 2>&1; then
-        if service --status-all 2>/dev/null | grep -qi "$svc_pattern"; then
+    if [ -n "$_SERVICE_CACHE" ]; then
+        if echo "$_SERVICE_CACHE" | grep -qi "$svc_pattern"; then
             local ver=""
             if [ -n "$ver_cmd" ]; then
                 ver=$(eval "$ver_cmd" 2>/dev/null | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
@@ -444,19 +732,71 @@ db_check_port() {
             fi
         fi
         if command -v netstat >/dev/null 2>&1; then
-            if netstat -tlnp 2>/dev/null | grep -q ":${port} "; then
+            if netstat -tln 2>/dev/null | grep -q ":${port} "; then
                 db_add "$db_name" ""
             fi
         fi
     fi
 }
 
+db_check_docker() {
+    local db_name="$1"
+    local image_keywords="$2"
+
+    if [ "$_DOCKER_AVAILABLE" = "0" ]; then
+        return
+    fi
+
+    if [ -z "$_DOCKER_PS_CACHE" ]; then
+        return
+    fi
+
+    for kw in $image_keywords; do
+        if echo "$_DOCKER_PS_CACHE" | grep -qi "$kw"; then
+            local ver=""
+            local container_id
+            container_id=$(echo "$_DOCKER_PS_CACHE" | grep -i "$kw" | head -1 | awk '{print $1}')
+            if [ -n "$container_id" ]; then
+                local img
+                img=$(docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null)
+                ver=$(echo "$img" | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+                if [ -z "$ver" ]; then
+                    ver=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container_id" 2>/dev/null | grep -iE 'VERSION|VER' | head -1 | grep -oE '[0-9]+(\.[0-9]+)*' | head -1)
+                fi
+            fi
+            db_add "$db_name" "$ver"
+            return
+        fi
+    done
+}
+
 detect_databases() {
     _DB_RESULTS=""
     _DB_FOUND=""
+    _SYSTEMD_CACHE=""
+    _DOCKER_PS_CACHE=""
+    _SERVICE_CACHE=""
 
-    db_check_cmd "达梦" "dmserver" "dmserver -V"
-    db_check_cmd "达梦" "disql" "disql -V"
+    if [ "$IS_ROOT" = "1" ] && command -v systemctl >/dev/null 2>&1; then
+        _SYSTEMD_CACHE=$(systemctl list-units --type=service --all --no-pager 2>/dev/null)
+    elif [ "$IS_ROOT" = "0" ]; then
+        _SYSTEMD_CACHE=$(ls /etc/systemd/system/*.service /usr/lib/systemd/system/*.service /lib/systemd/system/*.service 2>/dev/null | sed 's/.*\///; s/\.service$//')
+    fi
+
+    if command -v service >/dev/null 2>&1; then
+        if [ "$IS_ROOT" = "1" ]; then
+            _SERVICE_CACHE=$(service --status-all 2>/dev/null)
+        else
+            _SERVICE_CACHE=$(ls /etc/init.d/ 2>/dev/null)
+        fi
+    fi
+
+    if [ "$_DOCKER_AVAILABLE" = "1" ]; then
+        _DOCKER_PS_CACHE=$(docker ps --format '{{.ID}} {{.Image}} {{.Names}}' 2>/dev/null)
+    fi
+
+#    db_check_cmd "达梦" "dmserver" "dmserver -V"
+#    db_check_cmd "达梦" "disql" "disql -V"
     db_check_dir "达梦" "/opt/dmdbms /dmdbms /opt/dameng"
     for d in /opt/dmdbms/bin /dmdbms/bin; do
         if [ -d "$d" ] && [ -f "$d/dmserver" ]; then
@@ -469,10 +809,11 @@ detect_databases() {
     done
     db_check_service "达梦" "dmserver" ""
     db_check_process "达梦" "dmserver"
+    db_check_docker "达梦" "dmdb\|dameng\|dm8"
 
-    db_check_cmd "金仓" "kingbase" "kingbase -V"
-    db_check_cmd "金仓" "ksql" "ksql -V"
-    db_check_cmd "金仓" "sys_ctl" "sys_ctl -V"
+#    db_check_cmd "金仓" "kingbase" "kingbase -V"
+#    db_check_cmd "金仓" "ksql" "ksql -V"
+#    db_check_cmd "金仓" "sys_ctl" "sys_ctl -V"
     db_check_dir "金仓" "/opt/Kingbase /opt/kingbase /usr/local/kingbase"
     for d in /opt/Kingbase/ES/V8/Install/bin /opt/kingbase/bin; do
         if [ -d "$d" ] && [ -f "$d/kingbase" ]; then
@@ -485,41 +826,48 @@ detect_databases() {
     done
     db_check_service "金仓" "kingbase" ""
     db_check_process "金仓" "kingbase"
+    db_check_docker "金仓" "kingbase\|kingbasev8r6\|kingbase8"
 
-    db_check_cmd "神舟通用" "osdb" "osdb -V"
-    db_check_cmd "神舟通用" "osci" ""
+#    db_check_cmd "神舟通用" "osdb" "osdb -V"
+#    db_check_cmd "神舟通用" "osci" ""
     db_check_dir "神舟通用" "/opt/ShenTong /opt/shentong /usr/local/shentong"
     db_check_service "神舟通用" "shentong" ""
     db_check_process "神舟通用" "oscar\|osdb"
+    db_check_docker "神舟通用" "shentong\|oscar"
 
-    db_check_cmd "瀚高" "hgdb" "hgdb -V"
-    db_check_cmd "瀚高" "hgdb-admin" ""
+#    db_check_cmd "瀚高" "hgdb" "hgdb -V"
+#    db_check_cmd "瀚高" "hgdb-admin" ""
     db_check_dir "瀚高" "/opt/highgo /usr/local/highgo"
     db_check_service "瀚高" "highgo" ""
     db_check_process "瀚高" "hgdb\|highgo"
+    db_check_docker "瀚高" "highgo\|hgdb"
 
-    db_check_cmd "南大通用" "gbase" "gbase -V"
-    db_check_cmd "南大通用" "gbasedbt" "gbasedbt -V"
+#    db_check_cmd "南大通用" "gbase" "gbase -V"
+#    db_check_cmd "南大通用" "gbasedbt" "gbasedbt -V"
     db_check_dir "南大通用" "/opt/gbase /usr/local/gbase"
     db_check_service "南大通用" "gbase" ""
     db_check_process "南大通用" "gbase\|gbasedbt"
+    db_check_docker "南大通用" "gbase\|gbasedbt"
 
-    db_check_cmd "优炫" "uxsql" "uxsql -V"
-    db_check_cmd "优炫" "uxdb" "uxdb -V"
+#    db_check_cmd "优炫" "uxsql" "uxsql -V"
+#    db_check_cmd "优炫" "uxdb" "uxdb -V"
     db_check_dir "优炫" "/opt/uxdb /usr/local/uxdb"
     db_check_service "优炫" "uxdb" ""
     db_check_process "优炫" "uxdb"
+    db_check_docker "优炫" "uxdb"
 
-    db_check_cmd "海量" "vastbase" "vastbase -V"
-    db_check_cmd "海量" "vds_cli" ""
+#    db_check_cmd "海量" "vastbase" "vastbase -V"
+#    db_check_cmd "海量" "vds_cli" ""
     db_check_dir "海量" "/opt/vastbase /opt/hailiang"
     db_check_service "海量" "vastbase" ""
     db_check_process "海量" "vastbase\|vds"
+    db_check_docker "海量" "vastbase"
 
-    db_check_cmd "阿里PolarDB" "polardb" "polardb -V"
+#    db_check_cmd "阿里PolarDB" "polardb" "polardb -V"
     db_check_dir "阿里PolarDB" "/opt/polardb /usr/local/polardb"
     db_check_service "阿里PolarDB" "polardb" ""
     db_check_process "阿里PolarDB" "polardb"
+    db_check_docker "阿里PolarDB" "polardb\|polardbx"
     if command -v psql >/dev/null 2>&1; then
         local psql_out
         psql_out=$(psql --version 2>/dev/null | head -1)
@@ -530,97 +878,112 @@ detect_databases() {
         fi
     fi
 
-    db_check_cmd "腾讯TDSQL" "tdsql" "tdsql -V"
+#    db_check_cmd "腾讯TDSQL" "tdsql" "tdsql -V"
     db_check_dir "腾讯TDSQL" "/opt/tdsql /usr/local/tdsql"
     db_check_service "腾讯TDSQL" "tdsql" ""
     db_check_process "腾讯TDSQL" "tdsql"
+    db_check_docker "腾讯TDSQL" "tdsql\|tencentcloud\|tdsqlhack"
 
-    db_check_cmd "虚谷" "xugusql" "xugusql -V"
-    db_check_cmd "虚谷" "xugu" ""
+#    db_check_cmd "虚谷" "xugusql" "xugusql -V"
+#    db_check_cmd "虚谷" "xugu" ""
     db_check_dir "虚谷" "/opt/xugu /usr/local/xugu"
     db_check_service "虚谷" "xugu" ""
     db_check_process "虚谷" "xugu"
+    db_check_docker "虚谷" "xugu"
 
-    db_check_cmd "东方金信" "xdb" "xdb -V"
-    db_check_cmd "东方金信" "jxdb" ""
+#    db_check_cmd "东方金信" "xdb" "xdb -V"
+#    db_check_cmd "东方金信" "jxdb" ""
     db_check_dir "东方金信" "/opt/jxserver /opt/dongfang"
     db_check_service "东方金信" "jxserver" ""
     db_check_process "东方金信" "jxdb"
+    db_check_docker "东方金信" "jxserver\|dongfang"
 
-    db_check_cmd "万里开源" "greatsql" "greatsql -V"
-    db_check_cmd "万里开源" "greatdb" "greatdb -V"
+#    db_check_cmd "万里开源" "greatsql" "greatsql -V"
+#    db_check_cmd "万里开源" "greatdb" "greatdb -V"
     db_check_dir "万里开源" "/opt/greatdb /opt/greatsql"
     db_check_service "万里开源" "greatdb" ""
     db_check_process "万里开源" "greatsql\|greatdb"
+    db_check_docker "万里开源" "greatsql\|greatdb"
 
-    db_check_cmd "华为GaussDB" "gaussdb" "gaussdb -V"
-    db_check_cmd "华为GaussDB" "gs_ctl" "gs_ctl -V"
+#    db_check_cmd "华为GaussDB" "gaussdb" "gaussdb -V"
+#    db_check_cmd "华为GaussDB" "gs_ctl" "gs_ctl -V"
     db_check_dir "华为GaussDB" "/opt/gaussdb /opt/huawei/gaussdb /var/lib/gaussdb"
     db_check_service "华为GaussDB" "gaussdb" "gaussdb -V"
     db_check_process "华为GaussDB" "gaussdb\|gs_ctl"
+    db_check_docker "华为GaussDB" "gaussdb\|opengauss\|gaussdb-k8s"
 
-    db_check_cmd "平凯" "tidb" "tidb -V"
-    db_check_cmd "平凯" "pingcap" ""
+#    db_check_cmd "平凯" "tidb" "tidb -V"
+#    db_check_cmd "平凯" "pingcap" ""
     db_check_dir "平凯" "/opt/tidb /opt/pingcap"
     db_check_service "平凯" "tidb" "tidb -V"
     db_check_process "平凯" "tidb"
+    db_check_docker "平凯" "tidb\|pingcap\|tikv\|pd"
 
-    db_check_cmd "中兴GoldenDB" "goldendb" "goldendb -V"
+#    db_check_cmd "中兴GoldenDB" "goldendb" "goldendb -V"
     db_check_dir "中兴GoldenDB" "/opt/goldendb /opt/zte/goldendb"
     db_check_service "中兴GoldenDB" "goldendb" ""
     db_check_process "中兴GoldenDB" "goldendb"
+    db_check_docker "中兴GoldenDB" "goldendb\|zte"
 
-    db_check_cmd "奥星贝斯" "observer" "observer -V"
+#    db_check_cmd "奥星贝斯" "observer" "observer -V"
     db_check_dir "奥星贝斯" "/opt/oceanbase /usr/local/oceanbase"
     db_check_service "奥星贝斯" "oceanbase\|observer" ""
     db_check_process "奥星贝斯" "observer\|oceanbase"
     db_check_port "奥星贝斯" "2881"
+    db_check_docker "奥星贝斯" "oceanbase\|observer"
 
     db_check_dir "TaurusDB" "/opt/taurusdb /opt/huawei/taurusdb"
     db_check_service "TaurusDB" "taurusdb" ""
     db_check_process "TaurusDB" "taurusdb"
+    db_check_docker "TaurusDB" "taurusdb\|taurus"
 
-    db_check_cmd "MySQL" "mysql" "mysql --version"
-    db_check_cmd "MySQL" "mysqld" "mysqld --version"
+#    db_check_cmd "MySQL" "mysql" "mysql --version"
+#    db_check_cmd "MySQL" "mysqld" "mysqld --version"
     db_check_service "MySQL" "mysql\|mysqld\|mariadb" ""
     db_check_process "MySQL" "mysqld\|mariadbd"
     db_check_port "MySQL" "3306"
+    db_check_docker "MySQL" "mysql\|mariadb\|percona"
     if [ -d /var/lib/mysql ] || [ -d /var/lib/mysql/data ]; then
         db_add "MySQL" ""
     fi
 
-    db_check_cmd "PostgreSQL" "psql" "psql --version"
-    db_check_cmd "PostgreSQL" "postgres" "postgres --version"
+#    db_check_cmd "PostgreSQL" "psql" "psql --version"
+#    db_check_cmd "PostgreSQL" "postgres" "postgres --version"
     db_check_service "PostgreSQL" "postgresql\|postgres" ""
     db_check_process "PostgreSQL" "postgres"
     db_check_port "PostgreSQL" "5432"
+    db_check_docker "PostgreSQL" "postgres\|postgresql"
     if [ -d /var/lib/pgsql ] || [ -d /var/lib/postgresql ]; then
         db_add "PostgreSQL" ""
     fi
 
-    db_check_cmd "MariaDB" "mariadb" "mariadb --version"
-    db_check_cmd "MariaDB" "mariadbd" "mariadbd --version"
+#    db_check_cmd "MariaDB" "mariadb" "mariadb --version"
+#    db_check_cmd "MariaDB" "mariadbd" "mariadbd --version"
     db_check_service "MariaDB" "mariadb" ""
     db_check_process "MariaDB" "mariadbd"
     db_check_port "MariaDB" "3307"
+    db_check_docker "MariaDB" "mariadb"
 
-    db_check_cmd "Oracle" "sqlplus" "sqlplus -V"
+#    db_check_cmd "Oracle" "sqlplus" "sqlplus -V"
     db_check_dir "Oracle" "/opt/oracle /u01/app/oracle /u01/app/oracle/product"
     db_check_service "Oracle" "oracle\|oradb" ""
     db_check_process "Oracle" "ora_pmon\|oracle"
     db_check_port "Oracle" "1521"
+    db_check_docker "Oracle" "oracle\|oraclelinux\|oradb"
 
-    db_check_cmd "Redis" "redis-server" "redis-server --version"
-    db_check_cmd "Redis" "redis-cli" "redis-cli --version"
+#    db_check_cmd "Redis" "redis-server" "redis-server --version"
+#    db_check_cmd "Redis" "redis-cli" "redis-cli --version"
     db_check_service "Redis" "redis" ""
     db_check_process "Redis" "redis-server"
     db_check_port "Redis" "6379"
+    db_check_docker "Redis" "redis"
 
-    db_check_cmd "MongoDB" "mongod" "mongod --version"
-    db_check_cmd "MongoDB" "mongo" "mongo --version"
+#    db_check_cmd "MongoDB" "mongod" "mongod --version"
+#    db_check_cmd "MongoDB" "mongo" "mongo --version"
     db_check_service "MongoDB" "mongod\|mongodb" ""
     db_check_process "MongoDB" "mongod"
     db_check_port "MongoDB" "27017"
+    db_check_docker "MongoDB" "mongo\|mongodb"
 
     _DB_RESULTS=$(echo "$_DB_RESULTS" | sed '/^$/d' | sort -u)
 
@@ -628,6 +991,12 @@ detect_databases() {
         echo "不存在数据库"
     else
         echo "$_DB_RESULTS"
+    fi
+}
+
+get_uptime_history() {
+    if command -v last >/dev/null 2>&1; then
+        last reboot 2>/dev/null | head -20
     fi
 }
 
@@ -652,7 +1021,14 @@ CPU_MODEL=$(get_cpu_model)
 CPU_ARCH=$(get_cpu_arch)
 CPU_CORES=$(get_cpu_cores)
 KERNEL_VERSION=$(get_kernel_version)
+DUAL_BOOT=$(check_dual_boot)
+MACHINE_VENDOR=$(get_machine_vendor)
 DB_RESULT=$(detect_databases)
+UPTIME_HISTORY=$(get_uptime_history)
+
+if [ "$IS_ROOT" = "0" ]; then
+    echo "[!] 当前非root权限运行，部分检测项可能不完整（如efibootmgr、dmidecode、os-prober）"
+fi
 
 echo "[*] 系统名称:    ${OS_NAME}"
 echo "[*] 系统版本:    ${OS_VERSION}"
@@ -663,7 +1039,11 @@ echo "[*] CPU核心数:   ${CPU_CORES}"
 echo "[*] 主机名:      ${HOSTNAME_VAL}"
 echo "[*] IP地址:      ${IP_ADDR}"
 echo "[*] 数据库:      ${DB_RESULT}"
+echo "[*] 双系统:      ${DUAL_BOOT}"
+echo "[*] 机器品牌:    ${MACHINE_VENDOR}"
 echo "[*] 采集时间:    ${TIMESTAMP}"
+echo "[*] 开机历史:"
+echo "${UPTIME_HISTORY}"
 echo ""
 
 OUTPUT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -678,6 +1058,13 @@ KERNEL_VERSION_E=$(xml_escape "$KERNEL_VERSION")
 HOSTNAME_E=$(xml_escape "$HOSTNAME_VAL")
 IP_ADDR_E=$(xml_escape "$IP_ADDR")
 TIMESTAMP_E=$(xml_escape "$TIMESTAMP")
+
+DUAL_BOOT_FLAG=$(echo "$DUAL_BOOT" | cut -d'|' -f1)
+DUAL_BOOT_OS=$(echo "$DUAL_BOOT" | cut -d'|' -f2)
+DUAL_BOOT_FLAG_E=$(xml_escape "$DUAL_BOOT_FLAG")
+DUAL_BOOT_OS_E=$(xml_escape "$DUAL_BOOT_OS")
+MACHINE_VENDOR_E=$(xml_escape "$MACHINE_VENDOR")
+UPTIME_HISTORY_E=$(xml_escape "$UPTIME_HISTORY")
 
 DB_XML="  <Database>不存在数据库</Database>"
 
@@ -714,6 +1101,12 @@ cat > "$OUTPUT_FILE" << XMLEOF
     <Architecture>${CPU_ARCH_E}</Architecture>
     <Cores>${CPU_CORES_E}</Cores>
   </CPU>
+  <DualBoot>
+    <Flag>${DUAL_BOOT_FLAG_E}</Flag>
+    <OS>${DUAL_BOOT_OS_E}</OS>
+  </DualBoot>
+  <MachineVendor>${MACHINE_VENDOR_E}</MachineVendor>
+  <UptimeHistory>${UPTIME_HISTORY_E}</UptimeHistory>
 ${DB_XML}
 </SystemInfo>
 XMLEOF

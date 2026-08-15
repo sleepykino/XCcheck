@@ -13,6 +13,11 @@
     <Architecture>x86_64</Architecture>
     <Cores>32</Cores>
   </CPU>
+  <DualBoot>
+    <Flag>否</Flag>
+    <OS></OS>
+  </DualBoot>
+  <MachineVendor>戴尔</MachineVendor>
   <Database><Name>华为GaussDB</Name><Version>3.0</Version></Database>
   <Database><Name>瀚高</Name><Version>9.5</Version></Database>
 </SystemInfo>

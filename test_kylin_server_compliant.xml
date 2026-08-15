@@ -13,5 +13,10 @@
     <Architecture>x86_64</Architecture>
     <Cores>40</Cores>
   </CPU>
+  <DualBoot>
+    <Flag>否</Flag>
+    <OS></OS>
+  </DualBoot>
+  <MachineVendor>浪潮</MachineVendor>
   <Database>不存在数据库</Database>
 </SystemInfo>

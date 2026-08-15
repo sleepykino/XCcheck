@@ -342,6 +342,22 @@ body {
     gap: 8px;
 }
 
+.uptime-pre {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(44,64,87,0.4);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 11px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0;
+    line-height: 1.5;
+}
+
 .btn-sm {
     padding: 4px 12px; border-radius: 6px; font-size: 12px;
     background: transparent; border: 1px solid var(--border);
@@ -463,7 +479,7 @@ body {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                         系统名称
                     </div>
-                    <textarea class="rule-textarea" id="rule_osName" placeholder="每行一个合规的系统名称，例如：&#10;银河麒麟（桌面版）&#10;统信UOS（桌面版）"></textarea>
+                    <textarea class="rule-textarea" id="rule_osName"></textarea>
                     <div class="rule-hint">对采集到的"系统名称"字段进行合规匹配</div>
                 </div>
                 <div class="rule-group">
@@ -471,7 +487,7 @@ body {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                         系统版本
                     </div>
-                    <textarea class="rule-textarea" id="rule_osVersion" placeholder="每行一个合规的系统版本，例如：&#10;V10&#10;20"></textarea>
+                    <textarea class="rule-textarea" id="rule_osVersion"></textarea>
                     <div class="rule-hint">对采集到的"系统版本"字段进行合规匹配</div>
                 </div>
                 <div class="rule-group">
@@ -479,7 +495,7 @@ body {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
                         CPU型号
                     </div>
-                    <textarea class="rule-textarea" id="rule_cpuModel" placeholder="每行一个合规的CPU型号，例如：&#10;Kunpeng 920&#10;Loongson-3A5000"></textarea>
+                    <textarea class="rule-textarea" id="rule_cpuModel"></textarea>
                     <div class="rule-hint">对采集到的"CPU型号"字段进行合规匹配</div>
                 </div>
                 <div class="rule-group">
@@ -487,7 +503,7 @@ body {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
                         CPU架构
                     </div>
-                    <textarea class="rule-textarea" id="rule_cpuArch" placeholder="每行一个合规的CPU架构，例如：&#10;x86_64&#10;aarch64&#10;loongarch64"></textarea>
+                    <textarea class="rule-textarea" id="rule_cpuArch"></textarea>
                     <div class="rule-hint">对采集到的"CPU架构"字段进行合规匹配</div>
                 </div>
                 <div class="rule-group">
@@ -495,12 +511,27 @@ body {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
                         数据库类型
                     </div>
-                    <textarea class="rule-textarea" id="rule_dbName" placeholder="每行一个合规的数据库名称，例如：&#10;达梦&#10;金仓&#10;华为GaussDB"></textarea>
-                    <div class="rule-hint">对检测到的数据库类型进行合规匹配（任一数据库匹配即合规），非信创数据库（MySQL、Oracle等）也会被检测</div>
+                    <textarea class="rule-textarea" id="rule_dbName"></textarea>
+                    <div class="rule-hint">检测到的数据库必须全部在列表中才算合规，任一数据库不在列表即为不合规</div>
+                </div>
+                <div class="rule-group">
+                    <div class="rule-label">
+                        双系统
+                    </div>
+                    <textarea class="rule-textarea" id="rule_dualBoot"></textarea>
+                    <div class="rule-hint">填写合规的值，通常填"否"表示不允许存在双系统，填"是"表示允许</div>
+                </div>
+                <div class="rule-group">
+                    <div class="rule-label">
+                        机器品牌
+                    </div>
+                    <textarea class="rule-textarea" id="rule_machineVendor"></textarea>
+                    <div class="rule-hint">对检测到的机器品牌进行合规匹配</div>
                 </div>
             </div>
             <div class="compliance-actions">
                 <button class="btn" onclick="resetRules()">重置</button>
+                <button class="btn" onclick="importRulesFromFile()">导入规则</button>
                 <button class="btn btn-primary" onclick="applyRules()">应用合规规则</button>
             </div>
         </div>
@@ -542,6 +573,7 @@ body {
 
 <div class="toast" id="toast"></div>
 
+<script src="xlsx.full.min.js"></script>
 <script>
 let allData = [];
 let activeFilter = 'all';
@@ -550,16 +582,169 @@ let complianceRules = {
     osVersion: [],
     cpuModel: [],
     cpuArch: [],
-    dbName: []
+    dbName: [],
+    dualBoot: [],
+    machineVendor: []
 };
 let complianceResults = {};
 
-const RULE_KEYS = ['osName', 'osVersion', 'cpuModel', 'cpuArch', 'dbName'];
-const RULE_LABELS = { osName: '系统名称', osVersion: '系统版本', cpuModel: 'CPU型号', cpuArch: 'CPU架构' };
+const RULE_KEYS = ['osName', 'osVersion', 'cpuModel', 'cpuArch', 'dbName', 'dualBoot', 'machineVendor'];
+const RULE_LABELS = { osName: '系统名称', osVersion: '系统版本', cpuModel: 'CPU型号', cpuArch: 'CPU架构', dbName: '数据库', dualBoot: '双系统', machineVendor: '机器品牌' };
+
+const DEFAULT_RULES = {
+    osName: '麒麟\nkylin\nuos\n统信\n方德\nNFSCNS\nNFSChina Server\nEuler\n欧拉\nHCEOS\n阿里云\nAlibaba\nAlinux\n腾讯云\nTencentOS\n新支点\nNewStart\n凝思\nLinxOS\n天翼云\nCTyunOS\n鸿蒙\nHarmonyOS',
+    osVersion: 'V10\n10\nV20\n20\nV4.0\n4.0\nV3.1\n3.1\nV5.0\n5.0\nV10 SP1\n10 SP1\nV2.0\n2.0\nV3\n3\nV10 SP3\n10 SP3\nV6\n6\nV6.0.99\n6.0.99\nV11\n11\nV4\n4\nV1.0\n1.0\nV25\n25\nV7\n7',
+    cpuModel: 'Kunpeng 920\nLoongson-3C5000L\nWX-1621\nLoongson-3A4000/Loongson-3B4000\nLoongson-3A5000/Loongson-3B5000\nSW421\nWX-3231\nPhytium FD-D2000\nPhytium FD-2000\nPhytium FD-2000+\nCortex-A73\nPANGU M900\nPhytium FD-S2500\nHUAWEI Kirin 9006C\nHygon C86-3G\nHygon C86-5380\nHUAWEI Kirin 990\nHygon C86 72\nHygon C86 32\nHygon C86 52\nZHAOXIN KaiXian KX-U6780A\nZHAOXIN KaiXian KX-37800D\nZHAOXIN KaiXian KX-6640MA\nZHAOXIN KaiXian KX-U5580\nPhytium FD-S5000+\nPhytium FD-E2000\nPhytium FD-D3000\nLoongson-3A5000\nLoongson-3A6000\nLoongson-3C5000\nLoongson-3D5000\nHygon C86-4G\nKunpeng 920 V200\nHUAWEI Kirin 9000C\nLoongson-3K2000\nSW-WY831\nZHAOXIN KaiXian KX-40000\nHygon C86-4G-L\nZHAOXIN KaiXian KX-6000G\nZHAOXIN KaiXian KX-7000\nPhytium FD-S5000C-E\nLoongson-3B6000\nLoongson-3C6000\nWX-H8000\nHUAWEI Kirin X90\nSW-WY831-GC\nZHAOXIN KaiXian KX-U6980S\nZHAOXIN KaiXian KX-6940S\nLoongson-3B6000M\nHUAWEI Kirin 9000X\nPhytium FD-D3000M\nLoongson-3K1500',
+    cpuArch: '',
+    dbName: '达梦\ndisql\ndmserver\nPolarDB\nTDSQL\n瀚高\nhgdb\nhighgo\n虚谷\nxugusql\nxugu\n南大通用\ngbase\n海盒\nSeabox\n金仓\nKingbase\n海量\nvastbase\n万里\ngreatdb\n优炫\nuxdb\nGaussDB\n神通\nTaurusDB\n平凯\ntidb\nGoldenDB\n奥星贝斯\nOceanBase\n大云海山\n崖山\n东方金信',
+    dualBoot: '否',
+    machineVendor: '同方\n长城\n浪潮\n北京计算机技术及应用研究所\n联想\n华为\n宝德\n曙光\n鲲鹏\n百信\n超越\n黄河\n东海智通\n星网锐捷\n海康成视\n紫光\n海尔\n攀升\n神码\n国光\n升腾\n华创\n七喜\n海信\n中科可控\n五舟\n新华三\n河南昆仑\n超云\n烽火超微\n英诺艾智'
+};
+
+function loadDefaultRules() {
+    RULE_KEYS.forEach(key => {
+        const el = document.getElementById('rule_' + key);
+        if (el && !el.value.trim()) {
+            el.value = DEFAULT_RULES[key] || '';
+        }
+    });
+}
 
 const uploadZone = document.getElementById('uploadZone');
 const fileInput = document.getElementById('fileInput');
 const searchInput = document.getElementById('searchInput');
+
+loadDefaultRules();
+
+let _importWorkbook = null;
+
+function importRulesFromFile() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = new Uint8Array(ev.target.result);
+                _importWorkbook = XLSX.read(data, { type: 'array' });
+                showImportSheetSelector(_importWorkbook);
+            } catch (err) {
+                showToast('文件解析失败: ' + err.message, 'error');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+    input.click();
+}
+
+function showImportSheetSelector(wb) {
+    const sheets = wb.SheetNames;
+    const ruleOptions = RULE_KEYS.map(key => `<option value="${key}">${RULE_LABELS[key] || key}</option>`).join('');
+    const sheetOptions = sheets.map(s => `<option value="${s}">${s}</option>`).join('');
+
+    document.getElementById('modalContent').innerHTML = `
+        <h2><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        导入合规规则</h2>
+        <div style="margin-bottom:14px;">
+            <label style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;display:block;">选择规则项</label>
+            <select id="importRuleKey" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);">
+                ${ruleOptions}
+            </select>
+        </div>
+        <div style="margin-bottom:14px;">
+            <label style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;display:block;">选择Sheet页</label>
+            <select id="importSheetName" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);" onchange="showImportColumnSelector()">
+                ${sheetOptions}
+            </select>
+        </div>
+        <div id="importColumnArea" style="margin-bottom:14px;"></div>
+        <div id="importPreviewArea" style="margin-bottom:14px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" onclick="confirmImportRules()">导入</button>
+        </div>
+    `;
+    document.getElementById('modalOverlay').classList.add('active');
+    showImportColumnSelector();
+}
+
+function showImportColumnSelector() {
+    const wb = _importWorkbook;
+    if (!wb) return;
+    const sheetName = document.getElementById('importSheetName').value;
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return;
+    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    const headers = (jsonData[0] || []).filter(h => h != null && String(h).trim() !== '');
+    const colOptions = headers.map((h, i) => `<option value="${i}">${h}</option>`).join('');
+    document.getElementById('importColumnArea').innerHTML = `
+        <label style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;display:block;">选择列</label>
+        <select id="importColumnName" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--bg);color:var(--text);" onchange="previewImportData()">
+            ${colOptions}
+        </select>
+    `;
+    previewImportData();
+}
+
+function previewImportData() {
+    const wb = _importWorkbook;
+    if (!wb) return;
+    const sheetName = document.getElementById('importSheetName').value;
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return;
+    const colIdx = parseInt(document.getElementById('importColumnName').value);
+    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    const values = [];
+    for (let i = 1; i < jsonData.length; i++) {
+        const cell = jsonData[i] && jsonData[i][colIdx];
+        if (cell != null && String(cell).trim() !== '') {
+            String(cell).split(';').forEach(part => {
+                const v = part.trim();
+                if (v && !values.includes(v)) values.push(v);
+            });
+        }
+    }
+    document.getElementById('importPreviewArea').innerHTML = `
+        <label style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;display:block;">预览（共 ${values.length} 条规则）</label>
+        <div style="max-height:150px;overflow-y:auto;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);font-size:13px;line-height:1.8;">
+            ${values.map(v => `<span style="display:inline-block;padding:2px 8px;margin:2px;background:var(--bg);border:1px solid var(--border);border-radius:4px;">${v}</span>`).join('')}
+        </div>
+    `;
+}
+
+function confirmImportRules() {
+    const ruleKey = document.getElementById('importRuleKey').value;
+    const wb = _importWorkbook;
+    if (!wb) return;
+    const sheetName = document.getElementById('importSheetName').value;
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return;
+    const colIdx = parseInt(document.getElementById('importColumnName').value);
+    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    const values = [];
+    for (let i = 1; i < jsonData.length; i++) {
+        const cell = jsonData[i] && jsonData[i][colIdx];
+        if (cell != null && String(cell).trim() !== '') {
+            String(cell).split(';').forEach(part => {
+                const v = part.trim();
+                if (v && !values.includes(v)) values.push(v);
+            });
+        }
+    }
+    if (values.length === 0) {
+        showToast('未读取到有效数据', 'error');
+        return;
+    }
+    const el = document.getElementById('rule_' + ruleKey);
+    if (el) {
+        el.value = values.join('\n');
+    }
+    closeModal();
+    showToast(`已导入 ${values.length} 条规则到「${RULE_LABELS[ruleKey]}」`, 'success');
+}
 
 uploadZone.addEventListener('click', () => fileInput.click());
 uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
@@ -601,6 +786,10 @@ function parseXML(xmlStr, fileName) {
         cpuModel: getText(root, 'CPU > Model'),
         cpuArch: getText(root, 'CPU > Architecture'),
         cpuCores: getText(root, 'CPU > Cores'),
+        dualBootFlag: getText(root, 'DualBoot > Flag'),
+        dualBootOS: getText(root, 'DualBoot > OS'),
+        machineVendor: getText(root, 'MachineVendor'),
+        uptimeHistory: getText(root, 'UptimeHistory'),
         databases: parseDatabases(root),
         fileName: fileName,
         rawXML: xmlStr
@@ -646,7 +835,8 @@ function applyRules() {
 }
 
 function resetRules() {
-    RULE_KEYS.forEach(key => { document.getElementById('rule_' + key).value = ''; complianceRules[key] = []; });
+    loadDefaultRules();
+    RULE_KEYS.forEach(key => { complianceRules[key] = []; });
     complianceResults = {};
     updateUI();
     showToast('合规规则已重置', 'info');
@@ -665,13 +855,28 @@ function matchRule(value, ruleList) {
 
 function matchDbRule(databases, ruleList) {
     if (!ruleList || ruleList.length === 0) return 'na';
-    if (!databases || databases.length === 0) return 'fail';
+    if (!databases || databases.length === 0) return 'na';
     for (const db of databases) {
+        let found = false;
         for (const rule of ruleList) {
             const r = rule.toLowerCase().trim();
             const n = db.name.toLowerCase().trim();
-            if (n === r || n.includes(r) || r.includes(n)) return 'pass';
+            if (n === r || n.includes(r) || r.includes(n)) {
+                found = true;
+                break;
+            }
         }
+        if (!found) return 'fail';
+    }
+    return 'pass';
+}
+
+function matchDualBootRule(flag, ruleList) {
+    if (!ruleList || ruleList.length === 0) return 'na';
+    const val = (flag || '否').trim().toLowerCase();
+    for (const rule of ruleList) {
+        const r = rule.toLowerCase().trim();
+        if (val === r || val.includes(r) || r.includes(val)) return 'pass';
     }
     return 'fail';
 }
@@ -692,6 +897,8 @@ function runComplianceCheck() {
                 let status;
                 if (key === 'dbName') {
                     status = matchDbRule(d.databases, complianceRules[key]);
+                } else if (key === 'dualBoot') {
+                    status = matchDualBootRule(d.dualBootFlag, complianceRules[key]);
                 } else {
                     status = matchRule(d[key], complianceRules[key]);
                 }
@@ -916,6 +1123,22 @@ function renderCards() {
             </div>
             <div class="card-section">
                 <div class="section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    其他信息
+                </div>
+                ${renderRow('双系统', (d.dualBootFlag === '是' && d.dualBootOS) ? '是 (' + d.dualBootOS + ')' : (d.dualBootFlag || '否'), 'dualBoot')}
+                ${renderRow('机器品牌', d.machineVendor, 'machineVendor')}
+            </div>
+            ${d.uptimeHistory ? `
+            <div class="card-section">
+                <div class="section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    开机历史
+                </div>
+                <pre class="uptime-pre">${esc(d.uptimeHistory)}</pre>
+            </div>` : ''}
+            <div class="card-section">
+                <div class="section-title">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
                     数据库
                 </div>
@@ -988,11 +1211,13 @@ function exportCSV() {
     const hasAnyRule = RULE_KEYS.some(k => complianceRules[k].length > 0);
 
     const BOM = '\uFEFF';
-    let header = '主机名,IP地址,采集时间,系统名称,系统版本,内核版本,CPU型号,CPU架构,CPU核心数,数据库,来源文件';
+    let header = '主机名,IP地址,采集时间,系统名称,系统版本,内核版本,CPU型号,CPU架构,CPU核心数,双系统,机器品牌,数据库,来源文件';
     let rows = allData.map(d => [
         csvCell(d.hostname), csvCell(d.ip), csvCell(d.collectTime),
         csvCell(d.osName), csvCell(d.osVersion), csvCell(d.kernel),
         csvCell(d.cpuModel), csvCell(d.cpuArch), csvCell(d.cpuCores),
+        csvCell(d.dualBootFlag === '是' && d.dualBootOS ? '是(' + d.dualBootOS + ')' : (d.dualBootFlag || '否')),
+        csvCell(d.machineVendor),
         csvCell(formatDbsForCsv(d.databases)),
         csvCell(d.fileName)
     ].join(','));
@@ -1006,6 +1231,8 @@ function exportCSV() {
                 csvCell(d.hostname), csvCell(d.ip), csvCell(d.collectTime),
                 csvCell(d.osName), csvCell(d.osVersion), csvCell(d.kernel),
                 csvCell(d.cpuModel), csvCell(d.cpuArch), csvCell(d.cpuCores),
+                csvCell(d.dualBootFlag === '是' && d.dualBootOS ? '是(' + d.dualBootOS + ')' : (d.dualBootFlag || '否')),
+                csvCell(d.machineVendor),
                 csvCell(formatDbsForCsv(d.databases)),
                 csvCell(d.fileName), csvCell(statusText)
             ].join(',');

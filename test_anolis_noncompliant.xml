@@ -13,5 +13,10 @@
     <Architecture>x86_64</Architecture>
     <Cores>20</Cores>
   </CPU>
+  <DualBoot>
+    <Flag>是</Flag>
+    <OS>Windows</OS>
+  </DualBoot>
+  <MachineVendor>Unknown</MachineVendor>
   <Database><Name>MySQL</Name><Version>8.0.32</Version></Database>
 </SystemInfo>
